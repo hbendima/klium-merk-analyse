@@ -4,7 +4,10 @@
 const CRITERIA = {
   // Leveringsomvang (Desc_scope) is enkel verplicht als de doos vermoedelijk meerdere
   // losse onderdelen bevat (sets/kits/koffers), niet voor een los standaardproduct.
-  scopeKeywords: /\bset\b|\bkit\b|koffer|pakket|combinatie|\bduo\b|\btrio\b|multi|bundel|machine/i,
+  // Alle trefwoorden staan tussen \b (woordgrenzen) zodat ze niet per ongeluk matchen
+  // binnen samengestelde productnamen (bv. "boormachine", "combinatietang", "multimeter").
+  // "machine" en "multi" zijn bewust geschrapt: een los toestel/gereedschap is geen set.
+  scopeKeywords: /\bset\b|\bkit\b|\bkoffer\b|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b/i,
   minDescLen: 150, // heuristische ondergrens voor een niet-triviale NL-omschrijving
   defaultFields: {
     sku: "sku",
