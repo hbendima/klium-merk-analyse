@@ -7,9 +7,9 @@
 
 // Vul in via setup.html (nooit het wachtwoord zelf, enkel deze 3 velden):
 const AUTH_CONFIG = {
-  salt: "",
-  iv: "",
-  ciphertext: "",
+  salt: "M7ko6kj5wfUsGW5zmT9t7w==",
+  iv: "UW/ZNvpcPhSC/wqr",
+  ciphertext: "3DKtozCerUIio8XxLn3AK6jzkmnXnZqSu2feIlUm",
 };
 
 const AUTH_MARKER = "klium-unlocked";
