@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="nl" class="auth-lock">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klium &ndash; Merk Onboarding-analyse</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Klium &ndash; Merk Onboarding-analyse</h1>
+  <p>Laad een volledige Akeneo-productexport (CSV, puntkomma-gescheiden) in om te bepalen of een merk klaar is voor
+  Klium en hoeveel voorbereidend werk nog nodig is. Alles gebeurt lokaal in je browser &mdash; er wordt niets naar een
+  server gestuurd.</p>
+  <nav>
+    <a href="index.html" class="active">Analyseren</a>
+    <a href="history.html">Geschiedenis &amp; vergelijking</a>
+  </nav>
+</header>
+
+<main>
+  <section id="upload">
+    <h2>1. CSV inladen</h2>
+    <div class="dropzone" id="dropzone">
+      Sleep hier je CSV-export naartoe, of klik om een bestand te kiezen.
+      <input type="file" id="fileInput" accept=".csv" class="hidden">
+    </div>
+    <div class="upload-form">
+      <div class="field">
+        <label for="brandName">Merknaam</label>
+        <input type="text" id="brandName" placeholder="bv. ABUS">
+      </div>
+      <div class="field">
+        <label for="delimiter">Scheidingsteken</label>
+        <select id="delimiter">
+          <option value=";" selected>Puntkomma (;)</option>
+          <option value=",">Komma (,)</option>
+        </select>
+      </div>
+      <button id="analyzeBtn" disabled>Analyseer</button>
+    </div>
+    <details class="advanced">
+      <summary>Geavanceerd: kolomnamen aanpassen (enkel nodig als de export andere headers gebruikt)</summary>
+      <div class="field"><label for="f_descLong">NL lange omschrijving</label><input type="text" id="f_descLong" value="Desc_long (Nederlands België)"></div>
+      <div class="field"><label for="f_descScope">Desc_scope</label><input type="text" id="f_descScope" value="Desc_scope (Nederlands België)"></div>
+      <div class="field"><label for="f_price">Prijsveld</label><input type="text" id="f_price" value="Klium_price (Euro)"></div>
+      <div class="field"><label for="f_images">Afbeeldingen-veld</label><input type="text" id="f_images" value="Afbeeldingen"></div>
+    </details>
+    <div id="statusMsg"></div>
+  </section>
+
+  <section id="reportSection" class="hidden">
+    <h2>2. Resultaat</h2>
+    <div class="controls">
+      <button id="saveLocalBtn">Opslaan in geschiedenis (dit toestel)</button>
+      <button id="downloadBtn" class="secondary">Download JSON-snapshot (voor repo/team)</button>
+    </div>
+    <div id="reportRoot"></div>
+  </section>
+</main>
+
+<footer>Klium interne tool &mdash; merk onboarding-analyse. Draait volledig client-side, geschikt voor GitHub Pages.</footer>
+
+<script src="assets/auth.js"></script>
+<script src="assets/csvParser.js"></script>
+<script src="assets/analysis.js"></script>
+<script src="assets/report.js"></script>
+<script src="assets/storage.js"></script>
+<script>
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("fileInput");
+  const analyzeBtn = document.getElementById("analyzeBtn");
+  const statusMsg = document.getElementById("statusMsg");
+  const brandNameInput = document.getElementById("brandName");
+  const reportSection = document.getElementById("reportSection");
+  const reportRoot = document.getElementById("reportRoot");
+
+  let pendingFile = null;
+  let currentSnapshot = null;
+
+  dropzone.addEventListener("click", () => fileInput.click());
+  dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("drag"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+  dropzone.addEventListener("drop", e => {
+    e.preventDefault(); dropzone.classList.remove("drag");
+    if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) setFile(fileInput.files[0]);
+  });
+
+  function setFile(file) {
+    pendingFile = file;
+    dropzone.textContent = `Geselecteerd: ${file.name}`;
+    analyzeBtn.disabled = false;
+    statusMsg.innerHTML = "";
+  }
+
+  function showStatus(msg, type) {
+    statusMsg.innerHTML = `<div class="status-msg ${type}">${msg}</div>`;
+  }
+
+  analyzeBtn.addEventListener("click", async () => {
+    if (!pendingFile) return;
+    const brand = brandNameInput.value.trim() || "Onbekend merk";
+    const delimiter = document.getElementById("delimiter").value;
+    const overrideInputs = {
+      descLong: document.getElementById("f_descLong").value.trim(),
+      descScope: document.getElementById("f_descScope").value.trim(),
+      price: document.getElementById("f_price").value.trim(),
+      images: document.getElementById("f_images").value.trim(),
+    };
+    const fieldOverrides = {};
+    Object.entries(overrideInputs).forEach(([k, v]) => { if (v) fieldOverrides[k] = v; });
+    try {
+      const text = await pendingFile.text();
+      const { headers, records } = csvToObjects(text, delimiter);
+      if (!records.length) { showStatus("Geen rijen gevonden in dit bestand.", "error"); return; }
+
+      const result = analyzeExport(records, fieldOverrides);
+      currentSnapshot = {
+        brand, date: new Date().toISOString(), sourceFile: pendingFile.name, result,
+      };
+      renderReport(reportRoot, currentSnapshot);
+      reportSection.classList.remove("hidden");
+      showStatus(`Analyse voltooid: ${result.kpi.total} producten verwerkt.`, "ok");
+      reportSection.scrollIntoView({ behavior: "smooth" });
+    } catch (err) {
+      console.error(err);
+      showStatus("Er ging iets mis bij het inlezen/analyseren van dit bestand: " + err.message, "error");
+    }
+  });
+
+  document.getElementById("saveLocalBtn").addEventListener("click", () => {
+    if (!currentSnapshot) return;
+    saveToLocalHistory(currentSnapshot);
+    showStatus("Analyse bewaard in de lokale geschiedenis van dit toestel (zie 'Geschiedenis &amp; vergelijking').", "ok");
+  });
+
+  document.getElementById("downloadBtn").addEventListener("click", () => {
+    if (!currentSnapshot) return;
+    const fileName = downloadSnapshot(currentSnapshot);
+    showStatus(`JSON-snapshot gedownload als "${fileName}". Plaats dit bestand in data/history/ en voeg de bestandsnaam toe aan data/history/manifest.json om het permanent te delen via GitHub Pages.`, "ok");
+  });
+</script>
+</body>
+</html>

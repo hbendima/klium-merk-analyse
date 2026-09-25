@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="nl" class="auth-lock">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klium &ndash; Geschiedenis &amp; vergelijking</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header>
+  <h1>Geschiedenis &amp; vergelijking</h1>
+  <p>Overzicht van eerder geanalyseerde merken. "Lokaal" komt uit dit toestel/deze browser (localStorage).
+  "Gedeeld" komt uit <code>data/history/manifest.json</code> in de repo en is zichtbaar voor iedereen die de
+  GitHub Pages-site bezoekt. Selecteer meerdere rijen om ze naast elkaar te vergelijken.</p>
+  <nav>
+    <a href="index.html">Analyseren</a>
+    <a href="history.html" class="active">Geschiedenis &amp; vergelijking</a>
+  </nav>
+</header>
+
+<main>
+  <section id="importSection">
+    <h2>JSON-snapshot importeren</h2>
+    <p class="note">Heb je een gedownload snapshot-bestand (bv. van een collega of een ander toestel)? Importeer het
+    hier om het aan je lokale geschiedenis toe te voegen.</p>
+    <input type="file" id="importInput" accept=".json">
+    <div id="importStatus"></div>
+  </section>
+
+  <section id="listSection">
+    <h2>Overzicht</h2>
+    <div class="controls">
+      <button id="compareBtn" disabled>Vergelijk geselecteerde</button>
+      <button id="clearLocalBtn" class="secondary">Wis lokale geschiedenis</button>
+    </div>
+    <div class="scroll-table">
+    <table id="historyTable">
+      <thead>
+        <tr>
+          <th></th><th>Merk</th><th>Datum</th><th>Bron</th><th>#</th>
+          <th>Verkoopklaar</th><th>Foto ok</th><th>NL-tekst ok</th><th>Afmetingen ok</th><th>Gewicht ok</th>
+          <th>Gem. prijs</th><th>&lt;&euro;20</th><th>&ge;&euro;50</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section id="compareSection" class="hidden">
+    <h2>Vergelijking</h2>
+    <div class="scroll-table">
+    <table id="compareTable"></table>
+    </div>
+  </section>
+</main>
+
+<footer>Klium interne tool &mdash; merk onboarding-analyse. Draait volledig client-side, geschikt voor GitHub Pages.</footer>
+
+<script src="assets/auth.js"></script>
+<script src="assets/storage.js"></script>
+<script>
+  let allSnapshots = []; // { ...snapshot, origin: 'local'|'shared', localIndex }
+
+  async function loadAll() {
+    const local = getLocalHistory().map((s, i) => ({ ...s, origin: "local", localIndex: i }));
+    const shared = (await loadManifestHistory()).map(s => ({ ...s, origin: "shared" }));
+    allSnapshots = [...local, ...shared];
+    renderTable();
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById("historyBody");
+    tbody.innerHTML = allSnapshots.map((s, idx) => {
+      const sum = summarize(s);
+      return `<tr>
+        <td class="checkbox-cell"><input type="checkbox" data-idx="${idx}" class="rowCheck"></td>
+        <td>${sum.brand}</td>
+        <td>${new Date(sum.date).toLocaleDateString("nl-BE")}</td>
+        <td>${sum.sourceFile} <span class="pill">${s.origin === "local" ? "lokaal" : "gedeeld"}</span></td>
+        <td>${sum.total}</td>
+        <td>${sum.readyPct}%</td>
+        <td>${sum.imgOkPct}%</td>
+        <td>${sum.descOkPct}%</td>
+        <td>${sum.dimsOkPct}%</td>
+        <td>${sum.weightOkPct}%</td>
+        <td>&euro; ${sum.avgPrice.toFixed(2)}</td>
+        <td>${sum.under20Pct}%</td>
+        <td>${sum.over50Pct}%</td>
+        <td>${s.origin === "local" ? `<button class="secondary" data-del="${s.localIndex}">Verwijder</button>` : ""}</td>
+      </tr>`;
+    }).join("");
+
+    tbody.querySelectorAll(".rowCheck").forEach(cb => cb.addEventListener("change", updateCompareBtn));
+    tbody.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => {
+      deleteFromLocalHistory(parseInt(btn.dataset.del, 10));
+      loadAll();
+    }));
+  }
+
+  function updateCompareBtn() {
+    const checked = document.querySelectorAll(".rowCheck:checked");
+    document.getElementById("compareBtn").disabled = checked.length < 2;
+  }
+
+  document.getElementById("compareBtn").addEventListener("click", () => {
+    const idxs = [...document.querySelectorAll(".rowCheck:checked")].map(cb => parseInt(cb.dataset.idx, 10));
+    const selected = idxs.map(i => allSnapshots[i]);
+    renderCompare(selected);
+  });
+
+  function renderCompare(selected) {
+    const rows = [
+      ["Merk", s => s.brand],
+      ["Datum", s => new Date(s.date).toLocaleDateString("nl-BE")],
+      ["Aantal producten", s => summarize(s).total],
+      ["Verkoopklaar", s => summarize(s).readyPct + "%"],
+      ["Foto's ok (&ge;1)", s => summarize(s).imgOkPct + "%"],
+      ["NL-tekst aanwezig", s => summarize(s).descOkPct + "%"],
+      ["Afmetingen ok", s => summarize(s).dimsOkPct + "%"],
+      ["Gewicht ok", s => summarize(s).weightOkPct + "%"],
+      ["Gemiddelde prijs", s => "€ " + summarize(s).avgPrice.toFixed(2)],
+      ["Onder €20", s => summarize(s).under20Pct + "%"],
+      ["≥ €50 (premium)", s => summarize(s).over50Pct + "%"],
+    ];
+    const table = document.getElementById("compareTable");
+    table.innerHTML = `
+      <thead><tr><th>Criterium</th>${selected.map(s => `<th>${s.brand}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map(([label, fn]) => `<tr><td>${label}</td>${selected.map(s => `<td>${fn(s)}</td>`).join("")}</tr>`).join("")}</tbody>
+    `;
+    document.getElementById("compareSection").classList.remove("hidden");
+    document.getElementById("compareSection").scrollIntoView({ behavior: "smooth" });
+  }
+
+  document.getElementById("clearLocalBtn").addEventListener("click", () => {
+    if (confirm("Volledige lokale geschiedenis (dit toestel) wissen? Gedeelde/gecommitte snapshots blijven behouden.")) {
+      localStorage.removeItem(LOCAL_KEY);
+      loadAll();
+    }
+  });
+
+  document.getElementById("importInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const snapshot = JSON.parse(await file.text());
+      if (!snapshot.brand || !snapshot.result) throw new Error("Onherkenbaar snapshot-formaat.");
+      saveToLocalHistory(snapshot);
+      document.getElementById("importStatus").innerHTML =
+        `<div class="status-msg ok">"${snapshot.brand}" (${new Date(snapshot.date).toLocaleDateString("nl-BE")}) toegevoegd aan de lokale geschiedenis.</div>`;
+      loadAll();
+    } catch (err) {
+      document.getElementById("importStatus").innerHTML =
+        `<div class="status-msg error">Kon dit bestand niet importeren: ${err.message}</div>`;
+    }
+  });
+
+  loadAll();
+</script>
+</body>
+</html>
