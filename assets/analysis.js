@@ -3,11 +3,14 @@
 
 const CRITERIA = {
   // Leveringsomvang (Desc_scope) is enkel verplicht als de doos vermoedelijk meerdere
-  // losse onderdelen bevat (sets/kits/koffers), niet voor een los standaardproduct.
-  // Alle trefwoorden staan tussen \b (woordgrenzen) zodat ze niet per ongeluk matchen
-  // binnen samengestelde productnamen (bv. "boormachine", "combinatietang", "multimeter").
-  // "machine" en "multi" zijn bewust geschrapt: een los toestel/gereedschap is geen set.
-  scopeKeywords: /\bset\b|\bkit\b|\bkoffer\b|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b/i,
+  // losse onderdelen bevat (sets/kits/koffers, of een machine met accessoires/lader/koffer),
+  // niet voor een simpel los standaardproduct (bv. een hangslot).
+  // De meeste trefwoorden staan tussen \b (woordgrenzen) om te vermijden dat ze toevallig
+  // matchen binnen ongerelateerde samengestelde woorden (bv. "combinatietang", "multimeter").
+  // "machine" staat bewust ZONDER woordgrenzen: in het Nederlands wordt dit vaak aaneen-
+  // geschreven (bv. "boormachine", "satineermachine", "slijpmachine") en die producten
+  // hebben doorgaans wél accessoires/koffer/lader nodig om te documenteren.
+  scopeKeywords: /\bset\b|\bkit\b|\bkoffer\b|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b|machine/i,
   minDescLen: 150, // heuristische ondergrens voor een niet-triviale NL-omschrijving
   defaultFields: {
     sku: "sku",
