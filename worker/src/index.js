@@ -88,11 +88,16 @@ async function handleJudge(request, env, origin) {
     });
   }
 
+  const responseText = await upstream.text();
   let data;
   try {
-    data = await upstream.json();
+    data = JSON.parse(responseText);
   } catch {
-    return new Response(JSON.stringify({ error: "GitHub Models gaf geen geldige JSON terug", status: upstream.status }), {
+    return new Response(JSON.stringify({
+      error: "GitHub Models gaf geen geldige JSON terug",
+      status: upstream.status,
+      preview: responseText.slice(0, 500),
+    }), {
       status: 502, headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
     });
   }
