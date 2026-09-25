@@ -31,19 +31,42 @@
     <div id="importStatus"></div>
   </section>
 
+  <section id="summarySection" class="hidden">
+    <div class="kpis" id="summaryKpis"></div>
+  </section>
+
   <section id="listSection">
     <h2>Overzicht</h2>
     <div class="controls">
       <button id="compareBtn" disabled>Vergelijk geselecteerde</button>
       <button id="clearLocalBtn" class="secondary">Wis lokale geschiedenis</button>
+      <span class="legend">
+        <span><span class="dot" style="background:#2ecc71"></span>&ge;70% goed</span>
+        <span><span class="dot" style="background:#f5a623"></span>40&ndash;70% aandachtspunt</span>
+        <span><span class="dot" style="background:#e74c3c"></span>&lt;40% werk nodig</span>
+      </span>
+    </div>
+    <div id="emptyState" class="hidden">
+      <p class="note">Nog geen analyses opgeslagen. Ga naar <a href="index.html">Analyseren</a> om een eerste CSV-export te verwerken.</p>
     </div>
     <div class="scroll-table">
     <table id="historyTable">
       <thead>
         <tr>
-          <th></th><th>Merk</th><th>Datum</th><th>Bron</th><th>#</th>
-          <th>Verkoopklaar</th><th>Foto ok</th><th>NL-tekst ok</th><th>Afmetingen ok</th><th>Gewicht ok</th>
-          <th>Gem. prijs</th><th>&lt;&euro;20</th><th>&ge;&euro;50</th><th></th>
+          <th></th>
+          <th data-key="brand">Merk</th>
+          <th data-key="date">Datum</th>
+          <th>Bron</th>
+          <th data-key="total">#</th>
+          <th data-key="readyPct">Verkoopklaar</th>
+          <th data-key="imgOkPct">Foto</th>
+          <th data-key="descOkPct">NL-tekst</th>
+          <th data-key="dimsOkPct">Afmetingen</th>
+          <th data-key="weightOkPct">Gewicht</th>
+          <th data-key="avgPrice">Gem. prijs</th>
+          <th data-key="under20Pct">&lt;&euro;20</th>
+          <th data-key="over50Pct">&ge;&euro;50</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="historyBody"></tbody>
@@ -64,35 +87,69 @@
 <script src="assets/storage.js"></script>
 <script>
   let allSnapshots = []; // { ...snapshot, origin: 'local'|'shared', localIndex }
+  let sortState = { key: "date", dir: -1 };
+
+  function pctClass(pct) { return pct >= 70 ? "good" : pct >= 40 ? "warn" : "bad"; }
+  function pctBadge(pct) { return `<span class="pill sev-${pctClass(pct)}">${pct}%</span>`; }
 
   async function loadAll() {
     const local = getLocalHistory().map((s, i) => ({ ...s, origin: "local", localIndex: i }));
     const shared = (await loadManifestHistory()).map(s => ({ ...s, origin: "shared" }));
     allSnapshots = [...local, ...shared];
+    renderSummary();
     renderTable();
+  }
+
+  function renderSummary() {
+    const summarySection = document.getElementById("summarySection");
+    if (!allSnapshots.length) { summarySection.classList.add("hidden"); return; }
+    const sums = allSnapshots.map(summarize);
+    const avg = (fn) => Math.round(sums.reduce((s, x) => s + fn(x), 0) / sums.length);
+    document.getElementById("summaryKpis").innerHTML = `
+      <div class="kpi"><div class="val">${allSnapshots.length}</div><div class="lbl">Geanalyseerde merken</div></div>
+      <div class="kpi ${pctClass(avg(s => s.readyPct))}"><div class="val">${avg(s => s.readyPct)}%</div><div class="lbl">Gem. verkoopklaar</div></div>
+      <div class="kpi ${pctClass(avg(s => s.imgOkPct))}"><div class="val">${avg(s => s.imgOkPct)}%</div><div class="lbl">Gem. foto-dekking</div></div>
+      <div class="kpi ${pctClass(avg(s => s.descOkPct))}"><div class="val">${avg(s => s.descOkPct)}%</div><div class="lbl">Gem. NL-tekst-dekking</div></div>
+    `;
+    summarySection.classList.remove("hidden");
   }
 
   function renderTable() {
     const tbody = document.getElementById("historyBody");
-    tbody.innerHTML = allSnapshots.map((s, idx) => {
-      const sum = summarize(s);
-      return `<tr>
-        <td class="checkbox-cell"><input type="checkbox" data-idx="${idx}" class="rowCheck"></td>
-        <td>${sum.brand}</td>
+    const emptyState = document.getElementById("emptyState");
+    const listTable = document.getElementById("historyTable");
+
+    if (!allSnapshots.length) {
+      emptyState.classList.remove("hidden");
+      listTable.classList.add("hidden");
+      return;
+    }
+    emptyState.classList.add("hidden");
+    listTable.classList.remove("hidden");
+
+    const rows = allSnapshots.map((s, idx) => ({ ...summarize(s), idx, origin: s.origin, localIndex: s.localIndex }));
+    rows.sort((a, b) => {
+      let av = a[sortState.key], bv = b[sortState.key];
+      if (sortState.key === "date") { av = new Date(av).getTime(); bv = new Date(bv).getTime(); }
+      return (av > bv ? 1 : av < bv ? -1 : 0) * sortState.dir;
+    });
+
+    tbody.innerHTML = rows.map(sum => `<tr>
+        <td class="checkbox-cell"><input type="checkbox" data-idx="${sum.idx}" class="rowCheck"></td>
+        <td><b>${sum.brand}</b></td>
         <td>${new Date(sum.date).toLocaleDateString("nl-BE")}</td>
-        <td>${sum.sourceFile} <span class="pill">${s.origin === "local" ? "lokaal" : "gedeeld"}</span></td>
+        <td title="${sum.sourceFile}">${sum.sourceFile.length > 28 ? sum.sourceFile.slice(0, 25) + "…" : sum.sourceFile} <span class="pill">${sum.origin === "local" ? "lokaal" : "gedeeld"}</span></td>
         <td>${sum.total}</td>
-        <td>${sum.readyPct}%</td>
-        <td>${sum.imgOkPct}%</td>
-        <td>${sum.descOkPct}%</td>
-        <td>${sum.dimsOkPct}%</td>
-        <td>${sum.weightOkPct}%</td>
+        <td>${pctBadge(sum.readyPct)}</td>
+        <td>${pctBadge(sum.imgOkPct)}</td>
+        <td>${pctBadge(sum.descOkPct)}</td>
+        <td>${pctBadge(sum.dimsOkPct)}</td>
+        <td>${pctBadge(sum.weightOkPct)}</td>
         <td>&euro; ${sum.avgPrice.toFixed(2)}</td>
         <td>${sum.under20Pct}%</td>
         <td>${sum.over50Pct}%</td>
-        <td>${s.origin === "local" ? `<button class="secondary" data-del="${s.localIndex}">Verwijder</button>` : ""}</td>
-      </tr>`;
-    }).join("");
+        <td>${sum.origin === "local" ? `<button class="secondary" data-del="${sum.localIndex}">Verwijder</button>` : ""}</td>
+      </tr>`).join("");
 
     tbody.querySelectorAll(".rowCheck").forEach(cb => cb.addEventListener("change", updateCompareBtn));
     tbody.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => {
@@ -100,6 +157,12 @@
       loadAll();
     }));
   }
+
+  document.querySelectorAll("#historyTable th[data-key]").forEach(th => th.addEventListener("click", () => {
+    const key = th.dataset.key;
+    if (sortState.key === key) sortState.dir *= -1; else sortState = { key, dir: 1 };
+    renderTable();
+  }));
 
   function updateCompareBtn() {
     const checked = document.querySelectorAll(".rowCheck:checked");
@@ -117,11 +180,11 @@
       ["Merk", s => s.brand],
       ["Datum", s => new Date(s.date).toLocaleDateString("nl-BE")],
       ["Aantal producten", s => summarize(s).total],
-      ["Verkoopklaar", s => summarize(s).readyPct + "%"],
-      ["Foto's ok (&ge;1)", s => summarize(s).imgOkPct + "%"],
-      ["NL-tekst aanwezig", s => summarize(s).descOkPct + "%"],
-      ["Afmetingen ok", s => summarize(s).dimsOkPct + "%"],
-      ["Gewicht ok", s => summarize(s).weightOkPct + "%"],
+      ["Verkoopklaar", s => pctBadge(summarize(s).readyPct)],
+      ["Foto's ok (&ge;1)", s => pctBadge(summarize(s).imgOkPct)],
+      ["NL-tekst aanwezig", s => pctBadge(summarize(s).descOkPct)],
+      ["Afmetingen ok", s => pctBadge(summarize(s).dimsOkPct)],
+      ["Gewicht ok", s => pctBadge(summarize(s).weightOkPct)],
       ["Gemiddelde prijs", s => "€ " + summarize(s).avgPrice.toFixed(2)],
       ["Onder €20", s => summarize(s).under20Pct + "%"],
       ["≥ €50 (premium)", s => summarize(s).over50Pct + "%"],

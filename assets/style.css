@@ -73,6 +73,12 @@ details.advanced .field{margin-top:8px;}
 .status-msg.error{background:#3a2320;color:var(--bad);border:1px solid #5a2f2a;}
 .status-msg.ok{background:#123322;color:var(--good);border:1px solid #1c4a34;}
 .checkbox-cell{text-align:center;}
+.pill.sev-good{background:#123322;color:var(--good);font-weight:700;}
+.pill.sev-warn{background:#33270f;color:var(--warn);font-weight:700;}
+.pill.sev-bad{background:#3a2320;color:var(--bad);font-weight:700;}
+#historyTable th[data-key]{cursor:pointer;}
+#historyTable th[data-key]:hover{color:var(--text);}
+
 body.login-body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}
 .auth-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:360px;width:100%;text-align:center;}
 .auth-box h2{margin:0 0 8px;font-size:18px;}
