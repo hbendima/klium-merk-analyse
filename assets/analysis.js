@@ -78,9 +78,14 @@ function analyzeExport(rows, fieldOverrides = {}) {
   const F = { ...CRITERIA.defaultFields, ...fieldOverrides };
 
   const descCounter = new Map();
+  const descToSkus = new Map();
   rows.forEach(r => {
     const t = r[F.descLong] || "";
-    if (nz(t)) descCounter.set(t, (descCounter.get(t) || 0) + 1);
+    if (nz(t)) {
+      descCounter.set(t, (descCounter.get(t) || 0) + 1);
+      if (!descToSkus.has(t)) descToSkus.set(t, []);
+      descToSkus.get(t).push(r[F.sku] || "");
+    }
   });
 
   const data = rows.map(r => {
@@ -99,14 +104,16 @@ function analyzeExport(rows, fieldOverrides = {}) {
     const needsScope = scopeExpected(r, F);
     const hasScope = nz(r[F.descScope] || "");
     const kliumNameFilled = nz(r[F.kliumProductname] || "") && nz(r[F.kliumTitleSuffix] || "");
+    const displayName = (r[F.titleSupplier] || r[F.titleAS400] || r[F.kliumProductname] || "").trim();
 
     return {
       sku: r[F.sku] || "",
       ean: (r[F.ean] || "").trim(),
       family: cats || "(onbekend)",
+      name: displayName,
       price,
       images: imgc, imagesOk: imgc >= 1, imagesMulti: imgc >= 2,
-      descNL: descPresent, descShort, descDuplicated,
+      descNL: descPresent, descShort, descDuplicated, descText,
       needsScope, hasScope, scopeOk: needsScope ? hasScope : true,
       dims: dimsValid, weightOk: weightValid,
       w, l, h, weight,
@@ -142,8 +149,25 @@ function analyzeExport(rows, fieldOverrides = {}) {
   const priceUnder20 = prices.filter(p => p < 20).length;
   const priceOver50 = prices.filter(p => p >= 50).length;
 
+  // Concrete examples for judgment calls ("empty" is obvious, "is this text good?" isn't).
+  const stripHtml = (html) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const descDuplicateExamples = [...descToSkus.entries()]
+    .filter(([, skus]) => skus.length > 1)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 3)
+    .map(([text, skus]) => ({
+      preview: stripHtml(text).slice(0, 180),
+      rawText: text,
+      count: skus.length,
+      skus: skus.slice(0, 6),
+      extra: Math.max(0, skus.length - 6),
+    }));
+  const scopeExamples = data.filter(d => d.needsScope).slice(0, 8)
+    .map(d => ({ sku: d.sku, family: d.family, name: d.name, hasScope: d.hasScope }));
+
   return {
     data, catCounter, priceHist,
+    examples: { descDuplicates: descDuplicateExamples, scopeFlagged: scopeExamples },
     kpi: {
       total, imgMissing, imgMulti, descMissing, descDuplicated: descDuplicatedCnt, descUniqueTexts,
       dimsBad, weightBad, scopeNeeded, scopeMissing, kliumNameReady, fullyReady,

@@ -3,7 +3,38 @@
 Statische, client-side webtool om een volledige Akeneo CSV-productexport te analyseren
 en te bepalen of een merk klaar is voor Klium. Draait volledig in de browser (geen
 backend, geen data verlaat je toestel tenzij je zelf een snapshot deelt) en is
-rechtstreeks bruikbaar via **GitHub Pages**.
+rechtstreeks bruikbaar via **GitHub Pages**. Optioneel: echte LLM-beoordeling voor
+twijfelgevallen (zie "AI-beoordeling" hieronder) via een kleine serverless proxy.
+
+## AI-beoordeling (optioneel, echte LLM-analyse)
+
+De regel-gebaseerde analyse (`assets/analysis.js`) blijft de basis (foto's, afmetingen,
+enz. zijn objectief meetbaar). Voor **twijfelgevallen die een oordeel vragen**
+(is deze omschrijving goed genoeg? heeft dit product een leveringsomvang nodig?) kan je
+een "AI-beoordeling opvragen"-knop activeren in het rapport, bij de weergegeven
+voorbeelden. Dit gebeurt via een **echte LLM-aanroep** (GitHub Models), niet via de
+regel-gebaseerde heuristiek.
+
+Een statische site kan geen API-sleutel veilig bewaren (alles in de browser is publiek
+zichtbaar) &mdash; daarom loopt dit via een kleine **Cloudflare Worker** die de sleutel
+server-side bewaart en enkel aanroepen van jouw eigen site accepteert.
+
+**Eenmalige setup:**
+1. Maak een GitHub Personal Access Token aan (fine-grained, met "Models" read-toegang) op
+   [github.com/settings/tokens](https://github.com/settings/tokens).
+2. Installeer [Cloudflare Wrangler](https://developers.cloudflare.com/workers/wrangler/) en
+   log in: `npx wrangler login`.
+3. Ga naar `webtool/worker/`, zet de token als secret (nooit in code):
+   ```
+   npx wrangler secret put GITHUB_MODELS_TOKEN
+   ```
+4. Pas `ALLOWED_ORIGINS` in `worker/src/index.js` aan naar je echte GitHub Pages-URL.
+5. Deploy: `npx wrangler deploy` &mdash; je krijgt een URL zoals
+   `https://klium-merk-analyse-llm.<jouw-account>.workers.dev`.
+6. Zet die URL + `/judge` in `assets/llmClient.js` (`LLM_WORKER_URL`), commit en push.
+
+Zonder deze setup blijft de rest van de tool gewoon werken &mdash; de AI-knop toont dan
+enkel een duidelijke foutmelding in plaats van een crash.
 
 ## Toegangscode
 

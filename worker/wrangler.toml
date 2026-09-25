@@ -1,0 +1,6 @@
+name = "klium-merk-analyse-llm"
+main = "src/index.js"
+compatibility_date = "2024-09-25"
+
+# Stel de echte token in als secret (nooit hier in dit bestand):
+#   wrangler secret put GITHUB_MODELS_TOKEN
