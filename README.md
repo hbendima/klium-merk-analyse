@@ -24,7 +24,7 @@ server-side bewaart en enkel aanroepen van jouw eigen site accepteert.
   [github.com/settings/tokens](https://github.com/settings/tokens).
 2. Ga in de repo naar **Settings &rarr; Secrets and variables &rarr; Actions &rarr; New repository secret**.
 3. Maak secret `CLOUDFLARE_API_TOKEN` met je Cloudflare API-token (`Workers Scripts:Edit`).
-4. Maak secret `GITHUB_MODELS_TOKEN` met je GitHub Models-token.
+4. Maak secret `MODELS_API_TOKEN` met je GitHub Models-token (`GITHUB_` is gereserveerd door GitHub).
 5. Pas `ALLOWED_ORIGINS` in `worker/src/index.js` aan naar je echte GitHub Pages-URL.
 6. Push deze workflow of start hem handmatig via **Actions &rarr; Deploy Cloudflare Worker &rarr; Run workflow**.
   GitHub deployt de Worker en zet het Models-secret automatisch. De Worker-URL staat in de workflow-output.
