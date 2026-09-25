@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klium &ndash; Inloggen</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="login-body">
+
+<div class="auth-box">
+  <h2>Klium &mdash; intern gebruik</h2>
+  <p class="note">Voer de toegangscode in om verder te gaan.</p>
+  <input type="password" id="pw" placeholder="Toegangscode" autocomplete="current-password">
+  <button id="submitBtn">Inloggen</button>
+  <div id="err" class="status-msg error hidden">Onjuiste toegangscode.</div>
+</div>
+
+<script src="assets/auth.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const redirectTo = params.get("redirect") || "index.html";
+
+  if (isLoggedIn()) {
+    location.replace(redirectTo);
+  }
+
+  const pw = document.getElementById("pw");
+  const err = document.getElementById("err");
+  const submitBtn = document.getElementById("submitBtn");
+
+  async function attempt() {
+    submitBtn.disabled = true;
+    const ok = await tryUnlock(pw.value);
+    if (ok) {
+      sessionStorage.setItem(AUTH_SESSION_KEY, "1");
+      location.replace(redirectTo);
+    } else {
+      err.classList.remove("hidden");
+      pw.value = "";
+      pw.focus();
+      submitBtn.disabled = false;
+    }
+  }
+
+  submitBtn.addEventListener("click", attempt);
+  pw.addEventListener("keydown", e => { if (e.key === "Enter") attempt(); });
+  pw.focus();
+</script>
+</body>
+</html>

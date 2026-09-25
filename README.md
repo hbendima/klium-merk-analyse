@@ -5,24 +5,29 @@ en te bepalen of een merk klaar is voor Klium. Draait volledig in de browser (ge
 backend, geen data verlaat je toestel tenzij je zelf een snapshot deelt) en is
 rechtstreeks bruikbaar via **GitHub Pages**.
 
-## Toegangscode (let op: geen echte beveiliging)
+## Toegangscode
 
-De site vraagt bij het openen een toegangscode (`assets/auth.js`). Dit is **enkel een drempel
-tegen toevallige bezoekers**, geen echte beveiliging: de repo is publiek, dus HTML/JS/data
-blijven altijd rechtstreeks opvraagbaar voor iemand die dat gericht probeert. Zet er dus geen
-vertrouwelijke data in die dat niet mag verdragen.
+`index.html` en `history.html` sturen niet-ingelogde bezoekers meteen door naar `login.html`
+(niets van de inhoud wordt getoond voordat je bent ingelogd). De code zelf wordt **niet** als
+platte tekst of eenvoudige hash bewaard: `assets/auth.js` bevat enkel een versleutelde
+"marker"-waarde (salt/iv/ciphertext, AES-GCM met een PBKDF2-afgeleide sleutel uit je
+wachtwoord, 250.000 iteraties). Een login klopt pas als het ingevoerde wachtwoord die marker
+correct kan ontsleutelen.
 
-**Stel je eigen code in** (er staat bewust geen standaardcode meer in deze README of in de
-git-historiek). Genereer een hash in de browserconsole (F12) op om het even welke pagina:
-```js
-crypto.subtle.digest("SHA-256", new TextEncoder().encode("jouw-eigen-code"))
-  .then(b => console.log(Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,"0")).join("")));
-```
-Plak enkel de output-hash (nooit de code zelf) als `PASSPHRASE_HASH` in `assets/auth.js`, commit en push.
+**Instellen (eenmalig, lokaal, niemand anders ziet je wachtwoord):**
+1. Open `setup.html` in je browser.
+2. Kies een toegangscode, klik **Genereer**.
+3. Kopieer het weergegeven `AUTH_CONFIG`-blok naar `assets/auth.js` (vervang de lege waarden).
+4. Commit en push.
 
-Wil je wél echte toegangscontrole (data niet publiek opvraagbaar)? Dat vraagt een priv&eacute;
-repo + Pages-toegangsbeperking (GitHub Pro/Team/Enterprise) of een host met ingebouwde auth
-(bv. Cloudflare Pages + Access, Netlify password protection).
+Uitloggen kan via de "Uitloggen"-link in de navigatie (wist de sessie in deze browser).
+
+Belangrijk om te weten: dit is sterker dan een simpele hash-vergelijking, maar blijft
+client-side beveiliging op een publieke repo &mdash; de versleutelde configuratie is zelf ook
+publiek zichtbaar en dus in theorie offline te bruteforcen (al maakt PBKDF2 dat traag/duur per
+poging). Voor data die écht nooit publiek mag zijn, is een priv&eacute; repo + Pages-toegangsbeperking
+(GitHub Pro/Team/Enterprise) of een host met server-side auth (Cloudflare Access, Netlify
+password protection) de enige echte oplossing.
 
 ## Gebruik
 

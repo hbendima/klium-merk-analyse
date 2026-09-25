@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klium &ndash; Setup toegangscode</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header>
+  <h1>Setup toegangscode</h1>
+  <p>Deze pagina genereert lokaal in je browser een versleutelde configuratie voor
+  <code>assets/auth.js</code>. Er wordt niets verstuurd &mdash; kies hier je eigen code,
+  kopieer enkel het resultaat (nooit de code zelf) naar <code>AUTH_CONFIG</code>, commit en push.
+  Verwijder of blokkeer deze pagina daarna desgewenst.</p>
+</header>
+<main>
+  <section>
+    <h2>Genereer configuratie</h2>
+    <div class="upload-form">
+      <div class="field">
+        <label for="pw">Nieuwe toegangscode</label>
+        <input type="password" id="pw" placeholder="Kies een sterke code">
+      </div>
+      <button id="genBtn">Genereer</button>
+    </div>
+    <div id="result" class="hidden">
+      <h3>Kopieer dit blok naar assets/auth.js (AUTH_CONFIG)</h3>
+      <div class="scroll-table"><pre id="output" style="padding:16px;white-space:pre-wrap;word-break:break-all;"></pre></div>
+    </div>
+  </section>
+</main>
+<script src="assets/auth.js"></script>
+<script>
+  document.getElementById("genBtn").addEventListener("click", async () => {
+    const pw = document.getElementById("pw").value;
+    if (!pw) return;
+    const config = await generateAuthConfig(pw);
+    document.getElementById("output").textContent =
+`const AUTH_CONFIG = {
+  salt: "${config.salt}",
+  iv: "${config.iv}",
+  ciphertext: "${config.ciphertext}",
+};`;
+    document.getElementById("result").classList.remove("hidden");
+    document.getElementById("pw").value = "";
+  });
+</script>
+</body>
+</html>
