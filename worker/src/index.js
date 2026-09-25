@@ -65,14 +65,21 @@ async function handleJudge(request, env, origin) {
     return new Response(JSON.stringify({ error: e.message }), { status: 400, headers: corsHeaders(origin) });
   }
 
-  const upstream = await fetch(GITHUB_MODELS_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${env.GITHUB_MODELS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: MODEL, messages, temperature: 0.2, max_tokens: 200 }),
-  });
+  let upstream;
+  try {
+    upstream = await fetch(GITHUB_MODELS_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.GITHUB_MODELS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ model: MODEL, messages, temperature: 0.2, max_tokens: 200 }),
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: "Verbinding met GitHub Models mislukt", detail: error.message }), {
+      status: 502, headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
+    });
+  }
 
   if (!upstream.ok) {
     const errText = await upstream.text();
