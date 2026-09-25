@@ -11,6 +11,7 @@ const MODEL = "openai/gpt-4o-mini";
 const ALLOWED_ORIGINS = [
   "https://hbendima.github.io",
   "http://localhost:8080",
+  "null",
 ];
 
 const MAX_TEXT_LENGTH = 3000;
