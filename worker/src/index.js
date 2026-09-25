@@ -88,7 +88,14 @@ async function handleJudge(request, env, origin) {
     });
   }
 
-  const data = await upstream.json();
+  let data;
+  try {
+    data = await upstream.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "GitHub Models gaf geen geldige JSON terug", status: upstream.status }), {
+      status: 502, headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
+    });
+  }
   const raw = data?.choices?.[0]?.message?.content || "";
 
   let parsed;
