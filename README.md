@@ -19,19 +19,20 @@ Een statische site kan geen API-sleutel veilig bewaren (alles in de browser is p
 zichtbaar) &mdash; daarom loopt dit via een kleine **Cloudflare Worker** die de sleutel
 server-side bewaart en enkel aanroepen van jouw eigen site accepteert.
 
-**Eenmalige setup:**
+**Aanbevolen setup via GitHub Actions (omzeilt bedrijfsproxy/VPN):**
 1. Maak een GitHub Personal Access Token aan (fine-grained, met "Models" read-toegang) op
-   [github.com/settings/tokens](https://github.com/settings/tokens).
-2. Installeer [Cloudflare Wrangler](https://developers.cloudflare.com/workers/wrangler/) en
-   log in: `npx wrangler login`.
-3. Ga naar `webtool/worker/`, zet de token als secret (nooit in code):
-   ```
-   npx wrangler secret put GITHUB_MODELS_TOKEN
-   ```
-4. Pas `ALLOWED_ORIGINS` in `worker/src/index.js` aan naar je echte GitHub Pages-URL.
-5. Deploy: `npx wrangler deploy` &mdash; je krijgt een URL zoals
-   `https://klium-merk-analyse-llm.<jouw-account>.workers.dev`.
-6. Zet die URL + `/judge` in `assets/llmClient.js` (`LLM_WORKER_URL`), commit en push.
+  [github.com/settings/tokens](https://github.com/settings/tokens).
+2. Ga in de repo naar **Settings &rarr; Secrets and variables &rarr; Actions &rarr; New repository secret**.
+3. Maak secret `CLOUDFLARE_API_TOKEN` met je Cloudflare API-token (`Workers Scripts:Edit`).
+4. Maak secret `GITHUB_MODELS_TOKEN` met je GitHub Models-token.
+5. Pas `ALLOWED_ORIGINS` in `worker/src/index.js` aan naar je echte GitHub Pages-URL.
+6. Push deze workflow of start hem handmatig via **Actions &rarr; Deploy Cloudflare Worker &rarr; Run workflow**.
+  GitHub deployt de Worker en zet het Models-secret automatisch. De Worker-URL staat in de workflow-output.
+7. Zet die URL + `/judge` in `assets/llmClient.js` (`LLM_WORKER_URL`), commit en push.
+
+**Alternatief lokaal:** installeer [Cloudflare Wrangler](https://developers.cloudflare.com/workers/wrangler/),
+log in met `npx wrangler login`, zet `GITHUB_MODELS_TOKEN` met `npx wrangler secret put GITHUB_MODELS_TOKEN`
+en voer `npx wrangler deploy` uit. Dit kan door een bedrijfsproxy/VPN geblokkeerd worden.
 
 Zonder deze setup blijft de rest van de tool gewoon werken &mdash; de AI-knop toont dan
 enkel een duidelijke foutmelding in plaats van een crash.
