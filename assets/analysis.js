@@ -17,6 +17,7 @@ const CRITERIA = {
     ean: "EAN",
     categories: "[categories]",
     family: "[family]",
+    brand: "Merk",
     images: "Afbeeldingen",
     weightKg: "WEIGHT_KG",
     widthCm: "WIDTH_CM",
@@ -51,6 +52,21 @@ function scopeExpected(r, F) {
   const text = [r[F.titleAS400], r[F.titleSupplier], r[F.categories], r[F.family], r[F.kliumProductname]]
     .map(x => x || "").join(" ");
   return CRITERIA.scopeKeywords.test(text);
+}
+
+/** Detects the most common non-empty brand value (column "Merk" by default) in the export. */
+function detectBrand(records, fieldOverrides = {}) {
+  const F = { ...CRITERIA.defaultFields, ...fieldOverrides };
+  const counts = new Map();
+  records.forEach(r => {
+    const v = (r[F.brand] || "").trim();
+    if (v) counts.set(v, (counts.get(v) || 0) + 1);
+  });
+  let best = "", bestCount = 0;
+  for (const [v, c] of counts) {
+    if (c > bestCount) { best = v; bestCount = c; }
+  }
+  return best;
 }
 
 /**

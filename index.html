@@ -32,7 +32,7 @@
     <div class="upload-form">
       <div class="field">
         <label for="brandName">Merknaam</label>
-        <input type="text" id="brandName" placeholder="bv. ABUS">
+        <input type="text" id="brandName" placeholder="wordt gedetecteerd uit 'Merk'-kolom, of typ zelf">
       </div>
       <div class="field">
         <label for="delimiter">Scheidingsteken</label>
@@ -49,6 +49,7 @@
       <div class="field"><label for="f_descScope">Desc_scope</label><input type="text" id="f_descScope" value="Desc_scope (Nederlands België)"></div>
       <div class="field"><label for="f_price">Prijsveld</label><input type="text" id="f_price" value="Klium_price (Euro)"></div>
       <div class="field"><label for="f_images">Afbeeldingen-veld</label><input type="text" id="f_images" value="Afbeeldingen"></div>
+      <div class="field"><label for="f_brand">Merk-veld (voor auto-detectie)</label><input type="text" id="f_brand" value="Merk"></div>
     </details>
     <div id="statusMsg"></div>
   </section>
@@ -97,6 +98,23 @@
     dropzone.textContent = `Geselecteerd: ${file.name}`;
     analyzeBtn.disabled = false;
     statusMsg.innerHTML = "";
+    detectAndFillBrand(file);
+  }
+
+  async function detectAndFillBrand(file) {
+    if (brandNameInput.value.trim()) return; // don't override a name the user already typed
+    try {
+      const delimiter = document.getElementById("delimiter").value;
+      const text = await file.text();
+      const { records } = csvToObjects(text, delimiter);
+      const brandField = document.getElementById("f_brand").value.trim();
+      const detected = detectBrand(records, brandField ? { brand: brandField } : {});
+      if (detected && !brandNameInput.value.trim()) {
+        brandNameInput.value = detected;
+      }
+    } catch {
+      // silently ignore — brand detection is a convenience, not required to analyze
+    }
   }
 
   function showStatus(msg, type) {
@@ -112,6 +130,7 @@
       descScope: document.getElementById("f_descScope").value.trim(),
       price: document.getElementById("f_price").value.trim(),
       images: document.getElementById("f_images").value.trim(),
+      brand: document.getElementById("f_brand").value.trim(),
     };
     const fieldOverrides = {};
     Object.entries(overrideInputs).forEach(([k, v]) => { if (v) fieldOverrides[k] = v; });
