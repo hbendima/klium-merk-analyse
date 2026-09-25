@@ -16,6 +16,7 @@ const CRITERIA = {
     sku: "sku",
     ean: "EAN",
     categories: "[categories]",
+    family: "[family]",
     images: "Afbeeldingen",
     weightKg: "WEIGHT_KG",
     widthCm: "WIDTH_CM",
@@ -47,7 +48,7 @@ function countImages(v) {
 }
 
 function scopeExpected(r, F) {
-  const text = [r[F.titleAS400], r[F.titleSupplier], r[F.categories], r[F.kliumProductname]]
+  const text = [r[F.titleAS400], r[F.titleSupplier], r[F.categories], r[F.family], r[F.kliumProductname]]
     .map(x => x || "").join(" ");
   return CRITERIA.scopeKeywords.test(text);
 }
