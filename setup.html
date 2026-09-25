@@ -32,6 +32,14 @@
 </main>
 <script src="assets/auth.js"></script>
 <script>
+  // Zodra er al een echte AUTH_CONFIG is ingesteld, mag deze pagina enkel nog gebruikt
+  // worden door wie al ingelogd is (voorkomt verwarring bij toevallige bezoekers — het
+  // wijzigt sowieso niets aan de live site tenzij iemand met push-rechten het resultaat
+  // effectief commit, maar zo blijft de flow duidelijk: eerst inloggen, dan pas beheren).
+  if (AUTH_CONFIG.salt && !isLoggedIn()) {
+    location.replace("login.html?redirect=" + encodeURIComponent("setup.html"));
+  }
+
   document.getElementById("genBtn").addEventListener("click", async () => {
     const pw = document.getElementById("pw").value;
     if (!pw) return;
