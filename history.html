@@ -80,11 +80,21 @@
     <table id="compareTable"></table>
     </div>
   </section>
+
+  <section id="reportSection" class="hidden">
+    <h2>Volledig rapport</h2>
+    <div class="controls">
+      <button id="closeReportBtn" class="secondary">Sluiten</button>
+    </div>
+    <div id="reportRoot"></div>
+  </section>
 </main>
 
 <footer>Klium interne tool &mdash; merk onboarding-analyse. Draait volledig client-side, geschikt voor GitHub Pages.</footer>
 
 <script src="assets/storage.js"></script>
+<script src="assets/llmClient.js"></script>
+<script src="assets/report.js"></script>
 <script>
   let allSnapshots = []; // { ...snapshot, origin: 'local'|'shared', localIndex }
   let sortState = { key: "date", dir: -1 };
@@ -148,13 +158,20 @@
         <td>&euro; ${sum.avgPrice.toFixed(2)}</td>
         <td>${sum.under20Pct}%</td>
         <td>${sum.over50Pct}%</td>
-        <td>${sum.origin === "local" ? `<button class="secondary" data-del="${sum.localIndex}">Verwijder</button>` : ""}</td>
+        <td>${sum.origin === "local" ? `<button class="secondary" data-del="${sum.localIndex}">Verwijder</button>` : ""}
+            <button class="secondary" data-view="${sum.idx}">Bekijk rapport</button></td>
       </tr>`).join("");
 
     tbody.querySelectorAll(".rowCheck").forEach(cb => cb.addEventListener("change", updateCompareBtn));
     tbody.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => {
       deleteFromLocalHistory(parseInt(btn.dataset.del, 10));
       loadAll();
+    }));
+    tbody.querySelectorAll("[data-view]").forEach(btn => btn.addEventListener("click", () => {
+      const snapshot = allSnapshots[parseInt(btn.dataset.view, 10)];
+      renderReport(document.getElementById("reportRoot"), snapshot);
+      document.getElementById("reportSection").classList.remove("hidden");
+      document.getElementById("reportSection").scrollIntoView({ behavior: "smooth" });
     }));
   }
 
@@ -203,6 +220,10 @@
       localStorage.removeItem(LOCAL_KEY);
       loadAll();
     }
+  });
+
+  document.getElementById("closeReportBtn").addEventListener("click", () => {
+    document.getElementById("reportSection").classList.add("hidden");
   });
 
   document.getElementById("importInput").addEventListener("change", async (e) => {
