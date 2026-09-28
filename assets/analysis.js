@@ -66,9 +66,11 @@ const CRITERIA = {
     "Relatieve dichtheid", "Relatieve dichtheid ([unit])", "Chemische stoffen",
     "Chemische resistentie", "Poetsinstructies",
   ]),
-  // Minstens dit % van een categorie moet een kolom invullen voordat we ze als "relevant
-  // kenmerk voor deze categorie" beschouwen (voorkomt ruis van toevallig 1x ingevulde velden).
-  specRelevanceThreshold: 0.6,
+  // Enkel bedoeld om kolommen te filteren die voor deze categorie duidelijk NIET van
+  // toepassing zijn (zo goed als nooit ingevuld) — NIET om onvolledig ingevulde kenmerken te
+  // verbergen. Een kenmerk dat bv. maar 40% ingevuld is voor deze categorie moet zichtbaar
+  // blijven als een gat, niet uit de lijst verdwijnen. Vandaar een lage drempel.
+  specRelevanceThreshold: 0.05,
   specMinFamilySize: 3,
   defaultFields: {
     sku: "sku",

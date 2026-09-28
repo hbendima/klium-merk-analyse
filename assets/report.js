@@ -237,10 +237,13 @@ async function renderReport(container, snapshot) {
       <section id="technische-specs">
         <h2>Genormaliseerde technische specificaties</h2>
         <p class="note">Per categorie automatisch gedetecteerd: welke categorie-specifieke kenmerken (Akeneo's
-        "GENORMALISEERD"-groep, bv. Breedte/Type/Materiaal/Kleur) worden in de praktijk ingevuld, en hoe volledig.
-        Enkel categorieën met &ge; ${CRITERIA.specMinFamilySize} producten worden getoond; een kenmerk telt enkel mee
-        als &ge; ${Math.round(CRITERIA.specRelevanceThreshold * 100)}% van die categorie het invult.</p>
-        ${technicalSpecsHTML(technicalSpecs)}      </section>
+        "GENORMALISEERD"-groep, bv. Breedte/Type/Materiaal/Kleur) worden in de praktijk gebruikt, en hoe volledig ze
+        zijn ingevuld &mdash; ook als dat maar gedeeltelijk is (een kenmerk verdwijnt niet uit het overzicht enkel
+        omdat het niet 100% ingevuld is). Enkel categorie&euml;n met &ge; ${CRITERIA.specMinFamilySize} producten
+        worden getoond; een kenmerk wordt enkel getoond als het door minstens &eacute;&eacute;n product in die
+        categorie gebruikt wordt (anders is het duidelijk niet van toepassing op deze categorie).</p>
+        ${technicalSpecsHTML(technicalSpecs)}
+      </section>
 
       <section id="datakwaliteit">
         <h2>EAN-controle &amp; opvallende gevallen</h2>

@@ -58,7 +58,9 @@ NON_SPEC_COLUMNS_EXACT = {
     "Relatieve dichtheid", "Relatieve dichtheid ([unit])", "Chemische stoffen",
     "Chemische resistentie", "Poetsinstructies",
 }
-SPEC_RELEVANCE_THRESHOLD = 0.6
+# Enkel bedoeld om kolommen te filteren die duidelijk niet van toepassing zijn (zo goed als
+# nooit ingevuld) voor deze categorie -- NIET om onvolledig ingevulde kenmerken te verbergen.
+SPEC_RELEVANCE_THRESHOLD = 0.05
 SPEC_MIN_FAMILY_SIZE = 3
 
 FIELDS = {
