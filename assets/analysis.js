@@ -10,7 +10,15 @@ const CRITERIA = {
   // "machine" staat bewust ZONDER woordgrenzen: in het Nederlands wordt dit vaak aaneen-
   // geschreven (bv. "boormachine", "satineermachine", "slijpmachine") en die producten
   // hebben doorgaans wél accessoires/koffer/lader nodig om te documenteren.
-  scopeKeywords: /\bset\b|\bkit\b|\bkoffer\b|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b|machine/i,
+  scopeKeywords: /set|\bkit\b|koffer|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b|machine/i,
+  // Los gebruikt wanneer het product zelf al als accessoire/onderdeel bestempeld is (zie
+  // scopeExpected): dan telt "machine" niet mee, want een los onderdeel VOOR een machine
+  // is geen machine zelf en heeft normaal geen leveringsomvang nodig.
+  // "set" en "koffer" staan ZONDER woordgrenzen (aaneengeschreven Nederlandse samenstellingen,
+  // bv. "stripschijvenset", "gereedschapskoffer"). "kit" blijft WEL tussen woordgrenzen:
+  // ongebonden "kit" matcht anders per ongeluk binnen merknamen zoals "Makita" (MA-KIT-A).
+  scopeKeywordsNoMachine: /set|\bkit\b|koffer|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b/i,
+  accessoryIndicator: /\btoebehoren\b|\bonderdeel\b|\bonderdelen\b|\baccessoire\b|\breserveonderdeel\b|\bvervangonderdeel\b/i,
   minDescLen: 150, // heuristische ondergrens voor een niet-triviale NL-omschrijving
   defaultFields: {
     sku: "sku",
@@ -51,6 +59,9 @@ function countImages(v) {
 function scopeExpected(r, F) {
   const text = [r[F.titleAS400], r[F.titleSupplier], r[F.categories], r[F.family], r[F.kliumProductname]]
     .map(x => x || "").join(" ");
+  if (CRITERIA.accessoryIndicator.test(text)) {
+    return CRITERIA.scopeKeywordsNoMachine.test(text);
+  }
   return CRITERIA.scopeKeywords.test(text);
 }
 

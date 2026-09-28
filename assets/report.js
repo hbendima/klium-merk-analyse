@@ -195,20 +195,15 @@ function renderReport(container, snapshot) {
   `;
 
   wireProductTable(container, data);
-  container.__descDuplicateExamples = examples?.descDuplicates || [];
-  container.__scopeExamples = examples?.scopeFlagged || [];
-  wireLLMButtons(container);
 }
 
 function descDuplicateExamplesHTML(list) {
   if (!list || !list.length) return "";
   return `<div class="llm-examples">
     <h3>Voorbeelden om te beoordelen</h3>
-    ${list.map((ex, i) => `<div class="llm-example">
+    ${list.map((ex) => `<div class="llm-example">
         <p class="note">&ldquo;${ex.preview}&hellip;&rdquo; &mdash; gedeeld door <b>${ex.count}</b> producten
         (${ex.skus.join(", ")}${ex.extra ? ` + ${ex.extra} meer` : ""})</p>
-        <button class="secondary llm-btn" data-kind="description" data-idx="${i}">AI-beoordeling opvragen</button>
-        <div class="llm-result" id="llmResult-description-${i}"></div>
       </div>`).join("")}
   </div>`;
 }
@@ -217,48 +212,11 @@ function scopeExamplesHTML(list) {
   if (!list || !list.length) return "";
   return `<div class="llm-examples">
     <h3>Voorbeelden om te beoordelen</h3>
-    ${list.map((ex, i) => `<div class="llm-example">
+    ${list.map((ex) => `<div class="llm-example">
         <p class="note"><b>${ex.sku}</b> &mdash; ${ex.name || "(geen naam)"} <span class="pill">${ex.family}</span>
         ${ex.hasScope ? "(heeft al Desc_scope)" : "(mist Desc_scope)"}</p>
-        <button class="secondary llm-btn" data-kind="scope" data-idx="${i}">AI-beoordeling opvragen</button>
-        <div class="llm-result" id="llmResult-scope-${i}"></div>
       </div>`).join("")}
   </div>`;
-}
-
-function verdictClass(verdict) {
-  const v = (verdict || "").toLowerCase();
-  if (v === "goed" || v === "ja") return "sev-good";
-  if (v === "twijfel") return "sev-warn";
-  if (v === "zwak" || v === "nee") return "sev-bad";
-  return "";
-}
-
-function wireLLMButtons(container) {
-  const descriptionExamples = container.__descDuplicateExamples;
-  const scopeExamples = container.__scopeExamples;
-  container.querySelectorAll(".llm-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const kind = btn.dataset.kind;
-      const idx = parseInt(btn.dataset.idx, 10);
-      const resultEl = document.getElementById(`llmResult-${kind}-${idx}`);
-      const ex = kind === "description" ? descriptionExamples[idx] : scopeExamples[idx];
-      btn.disabled = true;
-      resultEl.textContent = "Bezig met beoordelen…";
-      try {
-        const text = kind === "description" ? ex.rawText : (ex.name || ex.sku);
-        const context = kind === "description"
-          ? { name: ex.skus.join(", "), family: "" }
-          : { name: ex.name, family: ex.family };
-        const judged = await judgeWithLLM(kind, text, context);
-        resultEl.innerHTML = `<span class="pill ${verdictClass(judged.verdict)}">${judged.verdict}</span> ${judged.reason || ""}`;
-      } catch (err) {
-        resultEl.innerHTML = `<span class="status-msg error">${err.message}</span>`;
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  });
 }
 
 function wireProductTable(container, data) {

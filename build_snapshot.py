@@ -12,7 +12,9 @@ import csv, json, re, sys, os
 from collections import Counter
 from datetime import datetime, timezone
 
-SCOPE_KEYWORDS = re.compile(r"\bset\b|\bkit\b|\bkoffer\b|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b|machine", re.I)
+SCOPE_KEYWORDS = re.compile(r"set|\bkit\b|koffer|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b|machine", re.I)
+SCOPE_KEYWORDS_NO_MACHINE = re.compile(r"set|\bkit\b|koffer|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b", re.I)
+ACCESSORY_INDICATOR = re.compile(r"\btoebehoren\b|\bonderdeel\b|\bonderdelen\b|\baccessoire\b|\breserveonderdeel\b|\bvervangonderdeel\b", re.I)
 MIN_DESC_LEN = 150
 
 FIELDS = {
@@ -51,6 +53,8 @@ def scope_expected(r):
         r.get(FIELDS["categories"], ""), r.get(FIELDS["family"], ""),
         r.get(FIELDS["kliumProductname"], ""),
     ])
+    if ACCESSORY_INDICATOR.search(text):
+        return bool(SCOPE_KEYWORDS_NO_MACHINE.search(text))
     return bool(SCOPE_KEYWORDS.search(text))
 
 
