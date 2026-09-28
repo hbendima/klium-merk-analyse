@@ -93,6 +93,7 @@
 <footer>Klium interne tool &mdash; merk onboarding-analyse. Draait volledig client-side, geschikt voor GitHub Pages.</footer>
 
 <script src="assets/storage.js"></script>
+<script src="assets/analysis.js"></script>
 <script src="assets/report.js"></script>
 <script>
   let allSnapshots = []; // { ...snapshot, origin: 'local'|'shared', localIndex }
@@ -168,9 +169,16 @@
     }));
     tbody.querySelectorAll("[data-view]").forEach(btn => btn.addEventListener("click", async () => {
       const snapshot = allSnapshots[parseInt(btn.dataset.view, 10)];
-      await renderReport(document.getElementById("reportRoot"), snapshot);
-      document.getElementById("reportSection").classList.remove("hidden");
-      document.getElementById("reportSection").scrollIntoView({ behavior: "smooth" });
+      const reportRoot = document.getElementById("reportRoot");
+      try {
+        await renderReport(reportRoot, snapshot);
+        document.getElementById("reportSection").classList.remove("hidden");
+        document.getElementById("reportSection").scrollIntoView({ behavior: "smooth" });
+      } catch (err) {
+        console.error(err);
+        reportRoot.innerHTML = `<div class="status-msg error">Kon het rapport niet openen: ${err.message}</div>`;
+        document.getElementById("reportSection").classList.remove("hidden");
+      }
     }));
   }
 
