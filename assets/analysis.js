@@ -140,6 +140,7 @@ function analyzeExport(rows, fieldOverrides = {}) {
   const imgMulti = data.filter(d => d.imagesMulti).length;
   const descMissing = data.filter(d => !d.descNL).length;
   const descDuplicatedCnt = data.filter(d => d.descDuplicated).length;
+  const descShortCnt = data.filter(d => d.descShort).length;
   const descUniqueTexts = descCounter.size;
   const dimsBad = data.filter(d => !d.dims).length;
   const weightBad = data.filter(d => !d.weightOk).length;
@@ -147,6 +148,19 @@ function analyzeExport(rows, fieldOverrides = {}) {
   const scopeMissing = data.filter(d => d.needsScope && !d.hasScope).length;
   const kliumNameReady = data.filter(d => d.kliumNameFilled).length;
   const fullyReady = data.filter(d => d.imagesOk && d.descNL && d.dims && d.weightOk && d.scopeOk).length;
+
+  // EAN-controle: ontbrekende en dubbele EAN's zijn een reëel risico (marketplace-feeds,
+  // barcode-scanning, prijsvergelijkers rekenen op een unieke, geldige EAN per product).
+  const eanCounter = new Map();
+  data.forEach(d => { if (nz(d.ean)) eanCounter.set(d.ean, (eanCounter.get(d.ean) || 0) + 1); });
+  const eanMissing = data.filter(d => !nz(d.ean)).length;
+  const eanDuplicatedGroups = [...eanCounter.entries()].filter(([, c]) => c > 1);
+  const eanDuplicatedCnt = data.filter(d => nz(d.ean) && eanCounter.get(d.ean) > 1).length;
+
+  // SKU-controle: sku hoort een unieke sleutel te zijn; duplicaten wijzen op een exportfout.
+  const skuCounter = new Map();
+  data.forEach(d => { if (nz(d.sku)) skuCounter.set(d.sku, (skuCounter.get(d.sku) || 0) + 1); });
+  const skuDuplicatedGroups = [...skuCounter.entries()].filter(([, c]) => c > 1);
 
   const prices = data.map(d => d.price).filter(p => p !== null).sort((a, b) => a - b);
   const n = prices.length;
@@ -159,6 +173,13 @@ function analyzeExport(rows, fieldOverrides = {}) {
   const priceUnder15 = prices.filter(p => p < 15).length;
   const priceUnder20 = prices.filter(p => p < 20).length;
   const priceOver50 = prices.filter(p => p >= 50).length;
+
+  // Prijsuitschieters: enkel betekenisvol met voldoende datapunten en een positieve mediaan.
+  const priceMissing = data.filter(d => d.price === null).length;
+  const priceZero = data.filter(d => d.price === 0).length;
+  const canCheckOutliers = n >= 5 && medianPrice > 0;
+  const priceOutliersHigh = canCheckOutliers ? data.filter(d => d.price !== null && d.price > medianPrice * 5) : [];
+  const priceOutliersLow = canCheckOutliers ? data.filter(d => d.price !== null && d.price > 0 && d.price < medianPrice * 0.1) : [];
 
   // Concrete examples for judgment calls ("empty" is obvious, "is this text good?" isn't).
   const stripHtml = (html) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -176,14 +197,38 @@ function analyzeExport(rows, fieldOverrides = {}) {
   const scopeExamples = data.filter(d => d.needsScope).slice(0, 8)
     .map(d => ({ sku: d.sku, family: d.family, name: d.name, hasScope: d.hasScope }));
 
+  // Algemene "opvallende gevallen" (data-anomalieën), los van de vaste criteria hierboven —
+  // bedoeld om rare/onverwachte dingen in de export zichtbaar te maken vóór een onboarding-beslissing.
+  const anomaly = (key, label, severity, items, skuOf = (d) => d.sku) => {
+    const skus = items.map(skuOf).filter(Boolean);
+    return { key, label, severity, count: items.length, skus: skus.slice(0, 8), extra: Math.max(0, skus.length - 8) };
+  };
+  const anomalies = [
+    anomaly("skuDuplicate", "Dubbele SKU (mogelijke exportfout)", "high",
+      skuDuplicatedGroups.flatMap(([sku]) => data.filter(d => d.sku === sku))),
+    anomaly("eanDuplicate", "Dubbele EAN (meerdere SKU's delen dezelfde barcode)", "high",
+      data.filter(d => nz(d.ean) && eanCounter.get(d.ean) > 1)),
+    anomaly("eanMissing", "EAN ontbreekt", "med", data.filter(d => !nz(d.ean))),
+    anomaly("priceMissing", "Prijs ontbreekt", "high", data.filter(d => d.price === null)),
+    anomaly("priceZero", "Prijs is € 0 (vermoedelijk fout)", "high", data.filter(d => d.price === 0)),
+    anomaly("priceOutlierHigh", "Prijs > 5x de mediaan (controleer of dit klopt)", "med", priceOutliersHigh),
+    anomaly("priceOutlierLow", "Prijs < 10% van de mediaan (controleer of dit klopt)", "med", priceOutliersLow),
+    anomaly("familyUnknown", "Categorie/familie ontbreekt", "med", data.filter(d => d.family === "(onbekend)")),
+  ].filter(a => a.count > 0);
+
   return {
     data, catCounter, priceHist,
     examples: { descDuplicates: descDuplicateExamples, scopeFlagged: scopeExamples },
+    anomalies,
     kpi: {
-      total, imgMissing, imgMulti, descMissing, descDuplicated: descDuplicatedCnt, descUniqueTexts,
+      total, imgMissing, imgMulti, descMissing, descDuplicated: descDuplicatedCnt, descShort: descShortCnt, descUniqueTexts,
       dimsBad, weightBad, scopeNeeded, scopeMissing, kliumNameReady, fullyReady,
+      eanMissing, eanDuplicated: eanDuplicatedCnt, eanDuplicatedGroups: eanDuplicatedGroups.length,
+      skuDuplicated: skuDuplicatedGroups.length,
       minPrice: n ? prices[0] : 0, maxPrice: n ? prices[n - 1] : 0, avgPrice, medianPrice,
-      priceUnder15, priceUnder20, priceOver50,
+      priceUnder15, priceUnder20, priceOver50, priceMissing, priceZero,
+      priceOutliersHigh: priceOutliersHigh.length, priceOutliersLow: priceOutliersLow.length,
+      familyCount: Object.keys(catCounter).length,
     },
   };
 }

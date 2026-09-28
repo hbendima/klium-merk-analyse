@@ -119,6 +119,7 @@ def analyze(rows):
         "imgMulti": cnt(lambda d: d["imagesMulti"]),
         "descMissing": cnt(lambda d: not d["descNL"]),
         "descDuplicated": cnt(lambda d: d["descDuplicated"]),
+        "descShort": cnt(lambda d: d["descShort"]),
         "descUniqueTexts": len(desc_counter),
         "dimsBad": cnt(lambda d: not d["dims"]),
         "weightBad": cnt(lambda d: not d["weightOk"]),
@@ -127,6 +128,20 @@ def analyze(rows):
         "kliumNameReady": cnt(lambda d: d["kliumNameFilled"]),
         "fullyReady": cnt(lambda d: d["imagesOk"] and d["descNL"] and d["dims"] and d["weightOk"] and d["scopeOk"]),
     }
+
+    # EAN- en SKU-controle: dubbels/ontbrekende waarden wijzen op reële datarisico's
+    # (barcode-scanning, marketplace-feeds, unieke identificatie per product).
+    ean_counter = Counter(d["ean"] for d in data if nz(d["ean"]))
+    ean_duplicated_groups = [(ean, c) for ean, c in ean_counter.items() if c > 1]
+    ean_duplicated_cnt = cnt(lambda d: nz(d["ean"]) and ean_counter[d["ean"]] > 1)
+    ean_missing = cnt(lambda d: not nz(d["ean"]))
+    sku_counter = Counter(d["sku"] for d in data if nz(d["sku"]))
+    sku_duplicated_groups = [(sku, c) for sku, c in sku_counter.items() if c > 1]
+    kpi.update({
+        "eanMissing": ean_missing, "eanDuplicated": ean_duplicated_cnt,
+        "eanDuplicatedGroups": len(ean_duplicated_groups), "skuDuplicated": len(sku_duplicated_groups),
+        "familyCount": len(cat_counter),
+    })
 
     prices = sorted(d["price"] for d in data if d["price"] is not None)
     n = len(prices)
@@ -143,6 +158,36 @@ def analyze(rows):
         "priceOver50": sum(1 for p in prices if p >= 50),
     })
 
+    # Prijsuitschieters: enkel betekenisvol met voldoende datapunten en een positieve mediaan.
+    price_missing = cnt(lambda d: d["price"] is None)
+    price_zero = cnt(lambda d: d["price"] == 0)
+    can_check_outliers = n >= 5 and median_price > 0
+    price_outliers_high = [d for d in data if d["price"] is not None and can_check_outliers and d["price"] > median_price * 5]
+    price_outliers_low = [d for d in data if d["price"] is not None and can_check_outliers and 0 < d["price"] < median_price * 0.1]
+    kpi.update({
+        "priceMissing": price_missing, "priceZero": price_zero,
+        "priceOutliersHigh": len(price_outliers_high), "priceOutliersLow": len(price_outliers_low),
+    })
+
+    def anomaly(key, label, severity, items):
+        skus = [d["sku"] for d in items if d.get("sku")]
+        return {"key": key, "label": label, "severity": severity, "count": len(items),
+                "skus": skus[:8], "extra": max(0, len(skus) - 8)}
+
+    sku_dup_items = [d for sku, _ in sku_duplicated_groups for d in data if d["sku"] == sku]
+    ean_dup_items = [d for d in data if nz(d["ean"]) and ean_counter[d["ean"]] > 1]
+    anomalies = [
+        anomaly("skuDuplicate", "Dubbele SKU (mogelijke exportfout)", "high", sku_dup_items),
+        anomaly("eanDuplicate", "Dubbele EAN (meerdere SKU's delen dezelfde barcode)", "high", ean_dup_items),
+        anomaly("eanMissing", "EAN ontbreekt", "med", [d for d in data if not nz(d["ean"])]),
+        anomaly("priceMissing", "Prijs ontbreekt", "high", [d for d in data if d["price"] is None]),
+        anomaly("priceZero", "Prijs is \u20ac 0 (vermoedelijk fout)", "high", [d for d in data if d["price"] == 0]),
+        anomaly("priceOutlierHigh", "Prijs > 5x de mediaan (controleer of dit klopt)", "med", price_outliers_high),
+        anomaly("priceOutlierLow", "Prijs < 10% van de mediaan (controleer of dit klopt)", "med", price_outliers_low),
+        anomaly("familyUnknown", "Categorie/familie ontbreekt", "med", [d for d in data if d["family"] == "(onbekend)"]),
+    ]
+    anomalies = [a for a in anomalies if a["count"] > 0]
+
     desc_dup_examples = sorted(
         ((t, skus) for t, skus in desc_to_skus.items() if len(skus) > 1),
         key=lambda x: -len(x[1]),
@@ -157,7 +202,8 @@ def analyze(rows):
         } for d in data if d["needsScope"]][:8],
     }
 
-    return {"data": data, "catCounter": dict(cat_counter), "priceHist": price_hist, "kpi": kpi, "examples": examples}
+    return {"data": data, "catCounter": dict(cat_counter), "priceHist": price_hist, "kpi": kpi,
+            "examples": examples, "anomalies": anomalies}
 
 
 def main():

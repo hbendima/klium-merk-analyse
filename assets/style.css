@@ -44,6 +44,12 @@ button:disabled{opacity:.5;cursor:not-allowed;}
 .conclusion b{color:var(--warn);}
 .conclusion.good{border-left-color:var(--good);background:#16281c;}
 .conclusion.good b{color:var(--good);}
+.conclusion-mini{border-left:3px solid var(--warn);background:#221c12;padding:10px 14px;border-radius:6px;font-size:13px;line-height:1.6;margin:10px 0 4px;}
+.conclusion-mini b{color:var(--warn);}
+.conclusion-mini.good{border-left-color:var(--good);background:#12241a;}
+.conclusion-mini.good b{color:var(--good);}
+.conclusion-mini.bad{border-left-color:var(--bad);background:#271615;}
+.conclusion-mini.bad b{color:var(--bad);}
 .scroll-table{max-height:520px;overflow:auto;border:1px solid var(--border);border-radius:8px;}
 .bar-list{display:flex;flex-direction:column;gap:10px;}
 .bar-row{display:grid;grid-template-columns:160px 1fr 100px;align-items:center;gap:12px;font-size:13px;}

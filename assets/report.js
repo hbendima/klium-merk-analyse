@@ -13,7 +13,7 @@ function barListHTML(entries, colors) {
   const total = entries.reduce((s, [, v]) => s + v, 0);
   const max = Math.max(...entries.map(([, v]) => v), 1);
   return entries.map(([label, val], i) => {
-    const widthPct = Math.max((val / max) * 100, 2);
+    const widthPct = val > 0 ? Math.max((val / max) * 100, 2) : 0;
     const sharePct = total ? ((val / total) * 100).toFixed(1) : "0.0";
     const color = colors ? colors[i % colors.length] : "#3fa9f5";
     return `<div class="bar-row">
@@ -24,9 +24,37 @@ function barListHTML(entries, colors) {
   }).join("");
 }
 
+function miniConclusion(text, tone) {
+  return `<div class="conclusion-mini ${tone}"><b>Conclusie:</b> ${text}</div>`;
+}
+
+function severityBadge(sev) {
+  const cls = sev === "high" ? "sev-bad" : sev === "med" ? "sev-warn" : "sev-good";
+  const label = sev === "high" ? "Hoog" : sev === "med" ? "Midden" : "Info";
+  return `<span class="pill ${cls}">${label}</span>`;
+}
+
+function anomaliesHTML(anomalies, total) {
+  if (!anomalies || !anomalies.length) {
+    return `<p class="note">Geen opvallende data-anomalieën gevonden (SKU/EAN-duplicaten, ontbrekende/rare prijzen,
+    ontbrekende categorie) op basis van de huidige checks.</p>`;
+  }
+  return `<table class="worklist">
+    <thead><tr><th>Bevinding</th><th>Aantal</th><th>Prioriteit</th><th>Voorbeeld-SKU's</th></tr></thead>
+    <tbody>
+      ${anomalies.map(a => `<tr>
+        <td>${a.label}</td>
+        <td>${a.count} (${pct(a.count, total)}%)</td>
+        <td>${severityBadge(a.severity)}</td>
+        <td>${a.skus.join(", ")}${a.extra ? ` + ${a.extra} meer` : ""}</td>
+      </tr>`).join("")}
+    </tbody>
+  </table>`;
+}
+
 function renderReport(container, snapshot) {
   const { brand, date, sourceFile, result } = snapshot;
-  const { data, catCounter, priceHist, kpi, examples } = result;
+  const { data, catCounter, priceHist, kpi, examples, anomalies } = result;
   const total = kpi.total;
   const rp = pct(kpi.fullyReady, total);
 
@@ -55,6 +83,7 @@ function renderReport(container, snapshot) {
         <a href="#prijs">Prijsanalyse</a>
         <a href="#content">Content</a>
         <a href="#logistiek">Afmetingen &amp; logistiek</a>
+        <a href="#datakwaliteit">EAN &amp; anomalieën</a>
         <a href="#status">Klium-status</a>
         <a href="#werklijst">Werklijst</a>
         <a href="#conclusie">Conclusie</a>
@@ -81,8 +110,12 @@ function renderReport(container, snapshot) {
         <h2>Assortimentsverdeling</h2>
         <div class="bar-list">${barListHTML(catEntries, famColors)}</div>
         <p class="note">${topFamilyPct}% van de lijst (${topFamily[1]}/${total}) bestaat uit <b>${topFamily[0]}</b>.
-        ${catEntries.length > 1 ? `De overige producten verdelen zich over ${catEntries.length - 1} andere categorie(&euml;n).` : ""}
-        Controleer of deze verdeling de gewenste merkpositionering weerspiegelt (smal/diep vs. breed assortiment).</p>
+        Deze export bevat in totaal <b>${kpi.familyCount} categorie/familiewaarde(n)</b>.
+        ${catEntries.length > 1 ? `De overige producten verdelen zich over ${catEntries.length - 1} andere categorie(&euml;n).` : "Er is slechts één categorie aanwezig in deze export."}</p>
+        <p class="note"><b>Let op &mdash; wat zien we NIET:</b> deze analyse is volledig gebaseerd op de meegeleverde export.
+        Als het merk in werkelijkheid een breder gamma voert dan deze ${kpi.familyCount} categorie(&euml;n) (bv. andere
+        producttypes, accessoirelijnen, kleurvarianten), dan is dat hier niet zichtbaar. Ga na bij de leverancier/het merk
+        of dit een bewuste selectie is voor Klium, of een onvolledige/gedeeltelijke export.</p>
       </section>
 
       <section id="prijs">
@@ -106,18 +139,39 @@ function renderReport(container, snapshot) {
         <p class="note">${total - kpi.imgMissing} van de ${total} producten (${pct(total - kpi.imgMissing, total)}%) hebben
         minstens 1 foto (vereiste). ${kpi.imgMulti} producten (${pct(kpi.imgMulti, total)}%) hebben meerdere foto's (bonus,
         niet blokkerend). ${kpi.imgMissing ? `<b>${kpi.imgMissing} producten missen zelfs 1 foto</b> en moeten eerst worden aangevuld.` : ""}</p>
-        <h3>NL lange omschrijving (belangrijkste tekstveld)</h3>
+
+        <h3>NL lange omschrijving (Desc_long)</h3>
         <p class="note">${total - kpi.descMissing} van de ${total} (${pct(total - kpi.descMissing, total)}%) hebben een
-        NL lange omschrijving; <b>${kpi.descMissing} producten missen deze volledig</b> (hoogste prioriteit).<br><br>
-        Kwaliteitscheck: van de gevulde teksten zijn er maar <b>${kpi.descUniqueTexts} unieke teksten</b> &mdash;
-        <b>${kpi.descDuplicated} producten (${pct(kpi.descDuplicated, total)}%)</b> delen dezelfde generieke tekst met
-        andere SKU's. Geen blokkerende fout, maar wel een inhoudelijk kwaliteitsrisico (niet altijd productspecifiek).</p>
+        NL lange omschrijving; <b>${kpi.descMissing} producten missen deze volledig</b>.
+        ${kpi.descShort ? `<b>${kpi.descShort} producten (${pct(kpi.descShort, total)}%)</b> hebben een opvallend korte tekst (mogelijk te summier).` : ""}
+        Van de gevulde teksten zijn er maar <b>${kpi.descUniqueTexts} unieke teksten</b> &mdash;
+        <b>${kpi.descDuplicated} producten (${pct(kpi.descDuplicated, total)}%)</b> delen dezelfde tekst met andere SKU's
+        (niet per se fout, maar wel te controleren op productspecificiteit).</p>
         ${descDuplicateExamplesHTML(examples?.descDuplicates)}
+        ${miniConclusion(
+          kpi.descMissing === 0 && pct(kpi.descDuplicated, total) < 20
+            ? `De NL-omschrijving is in orde: geen ontbrekende teksten en een beperkt aandeel hergebruikte tekst.`
+            : kpi.descMissing > 0
+              ? `<b>${kpi.descMissing} producten (${pct(kpi.descMissing, total)}%)</b> hebben nog geen NL-omschrijving &mdash; dit moet eerst aangevuld worden. ${kpi.descDuplicated ? `Daarnaast is bij ${pct(kpi.descDuplicated, total)}% de tekst hergebruikt over meerdere SKU's; controleer of dit inhoudelijk klopt per product.` : ""}`
+              : `Geen ontbrekende teksten, maar bij <b>${pct(kpi.descDuplicated, total)}%</b> van de producten is dezelfde tekst hergebruikt over meerdere SKU's &mdash; controleer of dit inhoudelijk klopt per product (zie voorbeelden hierboven).`,
+          kpi.descMissing === 0 && pct(kpi.descDuplicated, total) < 20 ? "good" : kpi.descMissing > 0 ? "bad" : "warn"
+        )}
+
         <h3>Desc_scope (leveringsomvang) &mdash; enkel waar relevant</h3>
-        <p class="note">Enkel verplicht bij sets/kits/koffers (meerdere losse onderdelen). Op basis van titel/categorie is
-        voor <b>${kpi.scopeNeeded} van de ${total} producten</b> een leveringsomvang te verwachten, waarvan er
-        <b>${kpi.scopeMissing}</b> deze nog missen. Desc_optional en Title_B2C worden bewust genegeerd.</p>
+        <p class="note">Enkel verplicht bij sets/kits/koffers of machines met accessoires (meerdere losse onderdelen),
+        niet voor een standaard enkelvoudig product. Op basis van titel/categorie is voor
+        <b>${kpi.scopeNeeded} van de ${total} producten (${pct(kpi.scopeNeeded, total)}%)</b> een leveringsomvang te
+        verwachten, waarvan er <b>${kpi.scopeMissing}</b> deze nog missen. Desc_optional en Title_B2C worden bewust
+        genegeerd.</p>
         ${scopeExamplesHTML(examples?.scopeFlagged)}
+        ${miniConclusion(
+          kpi.scopeNeeded === 0
+            ? `Niet van toepassing voor dit assortiment &mdash; er zijn geen sets/kits/koffers/machines met accessoires gedetecteerd die een leveringsomvang vereisen.`
+            : kpi.scopeMissing === 0
+              ? `Alle ${kpi.scopeNeeded} producten die een leveringsomvang vereisen, hebben deze ook ingevuld.`
+              : `<b>${kpi.scopeMissing} van de ${kpi.scopeNeeded} producten</b> die een leveringsomvang vereisen, missen deze nog &mdash; concrete actie nodig (zie voorbeelden hierboven).`,
+          kpi.scopeNeeded === 0 || kpi.scopeMissing === 0 ? "good" : "bad"
+        )}
       </section>
 
       <section id="logistiek">
@@ -126,6 +180,26 @@ function renderReport(container, snapshot) {
         <b>${kpi.dimsBad} van de ${total} producten (${pct(kpi.dimsBad, total)}%)</b> voor afmetingen en
         <b>${kpi.weightBad} (${pct(kpi.weightBad, total)}%)</b> voor gewicht. Dit is een reëel operationeel risico voor
         verzendkosten en transport bij foutieve/lege maten.</p>
+      </section>
+
+      <section id="datakwaliteit">
+        <h2>EAN-controle &amp; opvallende gevallen</h2>
+        <h3>EAN</h3>
+        <div class="kpis">
+          <div class="kpi ${kpi.eanMissing ? "bad" : "good"}"><div class="val">${pct(kpi.eanMissing, total)}%</div><div class="lbl">EAN ontbreekt</div></div>
+          <div class="kpi ${kpi.eanDuplicated ? "bad" : "good"}"><div class="val">${pct(kpi.eanDuplicated, total)}%</div><div class="lbl">EAN is een duplicaat</div></div>
+        </div>
+        ${miniConclusion(
+          !kpi.eanMissing && !kpi.eanDuplicated
+            ? "Alle EAN's zijn aanwezig en uniek."
+            : `${kpi.eanMissing ? `${kpi.eanMissing} producten missen een EAN. ` : ""}${kpi.eanDuplicated ? `${kpi.eanDuplicatedGroups} EAN-waarde(n) worden gedeeld door in totaal ${kpi.eanDuplicated} producten (moet uniek zijn per product).` : ""}`,
+          !kpi.eanMissing && !kpi.eanDuplicated ? "good" : "bad"
+        )}
+        <h3>Andere opvallende gevallen</h3>
+        <p class="note">Automatische checks los van de vaste criteria hierboven (dubbele identifiers, rare/ontbrekende
+        prijzen, ontbrekende categorie) &mdash; bedoeld om gekke dingen in de export op te sporen v&oacute;or een
+        onboarding-beslissing.</p>
+        ${anomaliesHTML(anomalies, total)}
       </section>
 
       <section id="status">
