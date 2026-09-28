@@ -196,6 +196,10 @@ function analyzeExport(rows, fieldOverrides = {}) {
     }));
   const scopeExamples = data.filter(d => d.needsScope).slice(0, 8)
     .map(d => ({ sku: d.sku, family: d.family, name: d.name, hasScope: d.hasScope }));
+  const descMissingExamples = data.filter(d => !d.descNL).slice(0, 12)
+    .map(d => ({ sku: d.sku, name: d.name, family: d.family }));
+  const descShortExamples = data.filter(d => d.descShort).slice(0, 12)
+    .map(d => ({ sku: d.sku, name: d.name, family: d.family, preview: stripHtml(d.descText).slice(0, 180), length: d.descText.length }));
 
   // Algemene "opvallende gevallen" (data-anomalieën), los van de vaste criteria hierboven —
   // bedoeld om rare/onverwachte dingen in de export zichtbaar te maken vóór een onboarding-beslissing.
@@ -218,7 +222,10 @@ function analyzeExport(rows, fieldOverrides = {}) {
 
   return {
     data, catCounter, priceHist,
-    examples: { descDuplicates: descDuplicateExamples, scopeFlagged: scopeExamples },
+    examples: {
+      descDuplicates: descDuplicateExamples, scopeFlagged: scopeExamples,
+      descMissing: descMissingExamples, descShort: descShortExamples,
+    },
     anomalies,
     kpi: {
       total, imgMissing, imgMulti, descMissing, descDuplicated: descDuplicatedCnt, descShort: descShortCnt, descUniqueTexts,

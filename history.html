@@ -166,9 +166,9 @@
       deleteFromLocalHistory(parseInt(btn.dataset.del, 10));
       loadAll();
     }));
-    tbody.querySelectorAll("[data-view]").forEach(btn => btn.addEventListener("click", () => {
+    tbody.querySelectorAll("[data-view]").forEach(btn => btn.addEventListener("click", async () => {
       const snapshot = allSnapshots[parseInt(btn.dataset.view, 10)];
-      renderReport(document.getElementById("reportRoot"), snapshot);
+      await renderReport(document.getElementById("reportRoot"), snapshot);
       document.getElementById("reportSection").classList.remove("hidden");
       document.getElementById("reportSection").scrollIntoView({ behavior: "smooth" });
     }));

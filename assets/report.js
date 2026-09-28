@@ -28,6 +28,45 @@ function miniConclusion(text, tone) {
   return `<div class="conclusion-mini ${tone}"><b>Conclusie:</b> ${text}</div>`;
 }
 
+/** Loads the optional manually-maintained brand reference (known product categories per brand). */
+async function loadBrandReference(brand) {
+  try {
+    const res = await fetch("data/brand-reference.json", { cache: "no-store" });
+    if (!res.ok) return null;
+    const map = await res.json();
+    return map[(brand || "").toUpperCase()] || null;
+  } catch {
+    return null;
+  }
+}
+
+function assortmentGapHTML(brandRef, presentLabels) {
+  if (!brandRef) return "";
+  const presentText = presentLabels.join(" | ").toLowerCase();
+  const rows = brandRef.knownCategories.map(c => {
+    const present = c.keywords.some(kw => presentText.includes(kw.toLowerCase()));
+    return { label: c.label, present };
+  });
+  const missing = rows.filter(r => !r.present);
+  return `
+    <h3>Vergelijking met het gekende merkgamma (${brandRef.source})</h3>
+    <p class="note">${brandRef.note || ""}</p>
+    <table class="worklist">
+      <thead><tr><th>Bekende productcategorie</th><th>In deze export?</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr><td>${r.label}</td><td>${r.present ? '<span class="pill sev-good">Aanwezig</span>' : '<span class="pill sev-bad">Niet in export</span>'}</td></tr>`).join("")}
+      </tbody>
+    </table>
+    ${miniConclusion(
+      missing.length === 0
+        ? "Alle bekende hoofdcategorie&euml;n van dit merk komen voor in deze export."
+        : `<b>${missing.length} van de ${rows.length} bekende hoofdcategorie&euml;n</b> van dit merk zitten niet in deze export: ${missing.map(m => m.label).join(", ")}. Ga na of dit een bewuste selectie is (bv. enkel een deelassortiment voor Klium) of een onvolledige export.`,
+      missing.length === 0 ? "good" : "warn"
+    )}
+    <p class="note" style="margin-top:8px;"><i>Automatische woord-match op basis van categorienamen &mdash; benaderend, controleer zelf bij twijfel.</i></p>
+  `;
+}
+
 function severityBadge(sev) {
   const cls = sev === "high" ? "sev-bad" : sev === "med" ? "sev-warn" : "sev-good";
   const label = sev === "high" ? "Hoog" : sev === "med" ? "Midden" : "Info";
@@ -52,11 +91,13 @@ function anomaliesHTML(anomalies, total) {
   </table>`;
 }
 
-function renderReport(container, snapshot) {
+async function renderReport(container, snapshot) {
   const { brand, date, sourceFile, result } = snapshot;
   const { data, catCounter, priceHist, kpi, examples, anomalies } = result;
   const total = kpi.total;
   const rp = pct(kpi.fullyReady, total);
+
+  const brandRef = await loadBrandReference(brand);
 
   const catEntries = Object.entries(catCounter).sort((a, b) => b[1] - a[1]);
   const priceOrder = ["<5", "5-10", "10-15", "15-20", "20-30", "30-50", ">=50"];
@@ -116,6 +157,7 @@ function renderReport(container, snapshot) {
         Als het merk in werkelijkheid een breder gamma voert dan deze ${kpi.familyCount} categorie(&euml;n) (bv. andere
         producttypes, accessoirelijnen, kleurvarianten), dan is dat hier niet zichtbaar. Ga na bij de leverancier/het merk
         of dit een bewuste selectie is voor Klium, of een onvolledige/gedeeltelijke export.</p>
+        ${assortmentGapHTML(brandRef, catEntries.map(([f]) => f))}
       </section>
 
       <section id="prijs">
@@ -147,6 +189,8 @@ function renderReport(container, snapshot) {
         Van de gevulde teksten zijn er maar <b>${kpi.descUniqueTexts} unieke teksten</b> &mdash;
         <b>${kpi.descDuplicated} producten (${pct(kpi.descDuplicated, total)}%)</b> delen dezelfde tekst met andere SKU's
         (niet per se fout, maar wel te controleren op productspecificiteit).</p>
+        ${simpleSkuListHTML(examples?.descMissing, "Producten zonder NL-omschrijving")}
+        ${descShortExamplesHTML(examples?.descShort)}
         ${descDuplicateExamplesHTML(examples?.descDuplicates)}
         ${miniConclusion(
           kpi.descMissing === 0 && pct(kpi.descDuplicated, total) < 20
@@ -271,10 +315,31 @@ function renderReport(container, snapshot) {
   wireProductTable(container, data);
 }
 
+function simpleSkuListHTML(list, title) {
+  if (!list || !list.length) return "";
+  return `<div class="llm-examples">
+    <h3>${title}</h3>
+    <div class="llm-example">
+      <p class="note">${list.map(ex => `<b>${ex.sku}</b> &mdash; ${ex.name || "(geen naam)"} <span class="pill">${ex.family}</span>`).join("<br>")}</p>
+    </div>
+  </div>`;
+}
+
+function descShortExamplesHTML(list) {
+  if (!list || !list.length) return "";
+  return `<div class="llm-examples">
+    <h3>Voorbeelden: opvallend korte omschrijving</h3>
+    ${list.map((ex) => `<div class="llm-example">
+        <p class="note"><b>${ex.sku}</b> &mdash; ${ex.name || "(geen naam)"} <span class="pill">${ex.family}</span> <span class="pill">${ex.length} tekens</span></p>
+        <p class="note">&ldquo;${ex.preview}&hellip;&rdquo;</p>
+      </div>`).join("")}
+  </div>`;
+}
+
 function descDuplicateExamplesHTML(list) {
   if (!list || !list.length) return "";
   return `<div class="llm-examples">
-    <h3>Voorbeelden om te beoordelen</h3>
+    <h3>Voorbeelden: hergebruikte tekst</h3>
     ${list.map((ex) => `<div class="llm-example">
         <p class="note">&ldquo;${ex.preview}&hellip;&rdquo; &mdash; gedeeld door <b>${ex.count}</b> producten
         (${ex.skus.join(", ")}${ex.extra ? ` + ${ex.extra} meer` : ""})</p>
@@ -285,7 +350,7 @@ function descDuplicateExamplesHTML(list) {
 function scopeExamplesHTML(list) {
   if (!list || !list.length) return "";
   return `<div class="llm-examples">
-    <h3>Voorbeelden om te beoordelen</h3>
+    <h3>Voorbeelden: leveringsomvang verwacht</h3>
     ${list.map((ex) => `<div class="llm-example">
         <p class="note"><b>${ex.sku}</b> &mdash; ${ex.name || "(geen naam)"} <span class="pill">${ex.family}</span>
         ${ex.hasScope ? "(heeft al Desc_scope)" : "(mist Desc_scope)"}</p>

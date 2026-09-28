@@ -200,6 +200,13 @@ def analyze(rows):
         "scopeFlagged": [{
             "sku": d["sku"], "family": d["family"], "name": d["name"], "hasScope": d["hasScope"],
         } for d in data if d["needsScope"]][:8],
+        "descMissing": [{
+            "sku": d["sku"], "name": d["name"], "family": d["family"],
+        } for d in data if not d["descNL"]][:12],
+        "descShort": [{
+            "sku": d["sku"], "name": d["name"], "family": d["family"],
+            "preview": strip_html(d["descText"])[:180], "length": len(d["descText"]),
+        } for d in data if d["descShort"]][:12],
     }
 
     return {"data": data, "catCounter": dict(cat_counter), "priceHist": price_hist, "kpi": kpi,

@@ -1,0 +1,20 @@
+{
+  "ABUS": {
+    "source": "Wikipedia (en.wikipedia.org/wiki/ABUS), geraadpleegd 2026-09-28",
+    "note": "ABUS deelt zijn gamma in drie hoofdgroepen op: Home Security, Mobile Security en Property Security. Wereldmarktleider in fietssloten en hangsloten.",
+    "knownCategories": [
+      { "label": "Hangsloten", "keywords": ["hangslot"] },
+      { "label": "Fietssloten", "keywords": ["fiets"] },
+      { "label": "Motorsloten", "keywords": ["motor"] },
+      { "label": "Raam-/deurbeveiliging", "keywords": ["raam", "deur"] },
+      { "label": "Rookmelders", "keywords": ["rookmelder"] },
+      { "label": "Camerabewaking (CCTV)", "keywords": ["camera", "video"] },
+      { "label": "Alarmsystemen", "keywords": ["alarm"] },
+      { "label": "Toegangscontrole-/cilindersystemen", "keywords": ["toegang", "cilinder", "access"] },
+      { "label": "Smart home beveiliging", "keywords": ["smart"] },
+      { "label": "Fietshelmen", "keywords": ["helm"] },
+      { "label": "Sleutelkasten", "keywords": ["sleutelkast"] },
+      { "label": "Boot-/waterbeveiliging", "keywords": ["boot"] }
+    ]
+  }
+}
