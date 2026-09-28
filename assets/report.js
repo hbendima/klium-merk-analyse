@@ -157,7 +157,7 @@ async function renderReport(container, snapshot) {
         Als het merk in werkelijkheid een breder gamma voert dan deze ${kpi.familyCount} categorie(&euml;n) (bv. andere
         producttypes, accessoirelijnen, kleurvarianten), dan is dat hier niet zichtbaar. Ga na bij de leverancier/het merk
         of dit een bewuste selectie is voor Klium, of een onvolledige/gedeeltelijke export.</p>
-        ${assortmentGapHTML(brandRef, catEntries.map(([f]) => f))}
+        ${assortmentGapHTML(brandRef, [...catEntries.map(([f]) => f), ...data.map(d => d.name)])}
       </section>
 
       <section id="prijs">

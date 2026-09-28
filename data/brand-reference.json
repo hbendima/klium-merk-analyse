@@ -16,5 +16,19 @@
       { "label": "Sleutelkasten", "keywords": ["sleutelkast"] },
       { "label": "Boot-/waterbeveiliging", "keywords": ["boot"] }
     ]
+  },
+  "MONTIPOWER": {
+    "source": "montipower.com (officiële website MONTI Surface Tech Group), geraadpleegd 2026-09-28",
+    "note": "MontiPower positioneert zich rond een 'Prepare / Verify / Sustain'-ecosysteem voor industriële oppervlaktevoorbereiding, opgebouwd uit meerdere merk-technologieën (Bristle Blaster, MBX, Tercoo, Vinyl Zapper, Prepper/robotica, Decapower, M-TESTCO, Great Lakes Gages).",
+    "knownCategories": [
+      { "label": "Bristle Blaster (satineermachines: elektrisch/pneumatisch/accu)", "keywords": ["satineermachine", "bristle"] },
+      { "label": "MBX (metal blast cleaning)", "keywords": ["mbx"] },
+      { "label": "Tercoo (pre-step zware verwijdering)", "keywords": ["terco"] },
+      { "label": "Vinyl Zapper (verwijdering vinyl/kleefstof)", "keywords": ["zapper"] },
+      { "label": "Prepper / robotica & drones (Q4, Q10, Aeroblaster)", "keywords": ["prepper", "drone", "aeroblaster", "robot"] },
+      { "label": "Decapower (DIY/consumentenlijn)", "keywords": ["decapower"] },
+      { "label": "M-TESTCO (meet-/inspectieapparatuur)", "keywords": ["testco"] },
+      { "label": "Great Lakes Gages (gecertificeerde inspectie-instrumenten)", "keywords": ["gage", "great lakes"] }
+    ]
   }
 }
