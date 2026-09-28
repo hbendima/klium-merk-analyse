@@ -6,29 +6,45 @@ backend, geen data verlaat je toestel tenzij je zelf een snapshot deelt) en is
 rechtstreeks bruikbaar via **GitHub Pages**. Optioneel: echte LLM-beoordeling voor
 twijfelgevallen (zie "AI-beoordeling" hieronder) via een kleine serverless proxy.
 
-## AI-beoordeling (optioneel, echte LLM-analyse)
+## Nieuw merk toevoegen (gedeelde geschiedenis)
 
-De regel-gebaseerde analyse (`assets/analysis.js`) blijft de basis (foto's, afmetingen,
-enz. zijn objectief meetbaar). Voor **twijfelgevallen die een oordeel vragen**
-(is deze omschrijving goed genoeg? heeft dit product een leveringsomvang nodig?) kan je
-een "AI-beoordeling opvragen"-knop activeren in het rapport, bij de weergegeven
-voorbeelden. Dit gebeurt via een **echte LLM-aanroep** (GitHub Models), niet via de
-regel-gebaseerde heuristiek.
+1. Zet de CSV-export in `Merken export/` (blijft lokaal, staat in `.gitignore`).
+2. Genereer de snapshot: `python build_snapshot.py "Merken export\<bestand>.csv" <MERKNAAM>`.
+3. Voeg de bestandsnaam toe aan `data/history/manifest.json`.
+4. Commit en push. Het merk staat meteen in `history.html` onder "gedeeld".
 
-Een statische site kan geen API-sleutel veilig bewaren (alles in de browser is publiek
-zichtbaar) &mdash; daarom loopt dit via een kleine **Cloudflare Worker** die de sleutel
-server-side bewaart en enkel aanroepen van jouw eigen site accepteert.
+**Optioneel**, niet verplicht: voeg een entry toe aan `data/brand-reference.json` met de
+échte bekende productcategorieën van het merk (bron vermelden). Dat geeft in het rapport
+een extra vergelijking "wat zit er wel/niet in deze export t.o.v. het volledige merkgamma".
+Ontbreekt deze entry voor een merk, dan toont die sectie gewoon niets extra &mdash; de rest
+van het rapport werkt onveranderd.
 
-**Aanbevolen setup via GitHub Actions (omzeilt bedrijfsproxy/VPN):**
-1. Maak een GitHub Personal Access Token aan (fine-grained, met "Models" read-toegang) op
-  [github.com/settings/tokens](https://github.com/settings/tokens).
+## AI-beoordeling (momenteel niet actief &mdash; GitHub Models is stopgezet)
+
+Er stond hier een "AI-beoordeling opvragen"-knop in het rapport gepland, via een echte
+LLM-aanroep (GitHub Models) achter een Cloudflare Worker-proxy. **GitHub Models is op
+30 juli 2026 volledig stopgezet**, dus die knop is terug uit de UI gehaald. De
+infrastructuur (`worker/`, `assets/llmClient.js`) staat nog klaar voor als je later een
+andere LLM-provider (Azure OpenAI, OpenAI, Anthropic) wil koppelen &mdash; enkel de
+endpoint/model-naam in `worker/src/index.js` moet dan aangepast worden. Tot dan gebeurt
+kwalitatieve beoordeling (is een tekst goed genoeg? klopt een classificatie?) gewoon
+handmatig, bv. via Copilot Chat.
+
+Een statische site kan hoe dan ook geen API-sleutel veilig bewaren (alles in de browser is
+publiek zichtbaar) &mdash; daarom liep/loopt dit via een kleine **Cloudflare Worker** die de
+sleutel server-side bewaart en enkel aanroepen van jouw eigen site accepteert.
+
+**Setup via GitHub Actions (omzeilt bedrijfsproxy/VPN), indien je dit heractiveert:**
+1. Maak een Personal Access Token aan bij de gekozen LLM-provider op
+  [github.com/settings/tokens](https://github.com/settings/tokens) (of het equivalent bij die provider).
 2. Ga in de repo naar **Settings &rarr; Secrets and variables &rarr; Actions &rarr; New repository secret**.
 3. Maak secret `CLOUDFLARE_API_TOKEN` met je Cloudflare API-token (`Workers Scripts:Edit`).
-4. Maak secret `MODELS_API_TOKEN` met je GitHub Models-token (`GITHUB_` is gereserveerd door GitHub).
+4. Maak secret `MODELS_API_TOKEN` met de token van de gekozen LLM-provider (`GITHUB_` is gereserveerd door GitHub).
 5. Pas `ALLOWED_ORIGINS` in `worker/src/index.js` aan naar je echte GitHub Pages-URL.
 6. Push deze workflow of start hem handmatig via **Actions &rarr; Deploy Cloudflare Worker &rarr; Run workflow**.
-  GitHub deployt de Worker en zet het Models-secret automatisch. De Worker-URL staat in de workflow-output.
+  GitHub deployt de Worker en zet het secret automatisch. De Worker-URL staat in de workflow-output.
 7. Zet die URL + `/judge` in `assets/llmClient.js` (`LLM_WORKER_URL`), commit en push.
+
 
 **Alternatief lokaal:** installeer [Cloudflare Wrangler](https://developers.cloudflare.com/workers/wrangler/),
 log in met `npx wrangler login`, zet `GITHUB_MODELS_TOKEN` met `npx wrangler secret put GITHUB_MODELS_TOKEN`
