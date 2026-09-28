@@ -93,7 +93,7 @@ function anomaliesHTML(anomalies, total) {
 
 async function renderReport(container, snapshot) {
   const { brand, date, sourceFile, result } = snapshot;
-  const { data, catCounter, priceHist, kpi, examples, anomalies } = result;
+  const { data, catCounter, priceHist, kpi, examples, anomalies, dimensionStats, technicalSpecs } = result;
   const total = kpi.total;
   const rp = pct(kpi.fullyReady, total);
 
@@ -124,6 +124,7 @@ async function renderReport(container, snapshot) {
         <a href="#prijs">Prijsanalyse</a>
         <a href="#content">Content</a>
         <a href="#logistiek">Afmetingen &amp; logistiek</a>
+        <a href="#technische-specs">Technische specs</a>
         <a href="#datakwaliteit">EAN &amp; anomalieën</a>
         <a href="#status">Klium-status</a>
         <a href="#werklijst">Werklijst</a>
@@ -223,8 +224,23 @@ async function renderReport(container, snapshot) {
         <p class="note">Logistieke maten (lengte/breedte/hoogte in cm en gewicht in kg) ontbreken of staan op 0 bij
         <b>${kpi.dimsBad} van de ${total} producten (${pct(kpi.dimsBad, total)}%)</b> voor afmetingen en
         <b>${kpi.weightBad} (${pct(kpi.weightBad, total)}%)</b> voor gewicht. Dit is een reëel operationeel risico voor
-        verzendkosten en transport bij foutieve/lege maten.</p>
+        verzendkosten en transport bij foutieve/lege maten.</p>        ${dimensionStats ? dimensionStatsHTML(dimensionStats) : ""}
+        <h3>Fysieke plausibiliteit</h3>
+        <p class="note">Naast "ontbreekt/is 0" checken we ook of ingevulde maten/gewicht fysiek reëel zijn (grens:
+        ${CRITERIA.plausibleDimCm.min}&ndash;${CRITERIA.plausibleDimCm.max} cm per as, ${CRITERIA.plausibleWeightKg.min}&ndash;${CRITERIA.plausibleWeightKg.max} kg)
+        &mdash; bedoeld om evidente eenheden-/invoerfouten te vangen die de "ontbreekt"-check niet ziet.
+        <b>${kpi.dimsImplausible || 0} producten</b> hebben onwaarschijnlijke afmetingen,
+        <b>${kpi.weightImplausible || 0}</b> een onwaarschijnlijk gewicht.</p>
+        ${dimsImplausibleExamplesHTML(examples?.dimsImplausible)}
       </section>
+
+      <section id="technische-specs">
+        <h2>Genormaliseerde technische specificaties</h2>
+        <p class="note">Per categorie automatisch gedetecteerd: welke categorie-specifieke kenmerken (Akeneo's
+        "GENORMALISEERD"-groep, bv. Breedte/Type/Materiaal/Kleur) worden in de praktijk ingevuld, en hoe volledig.
+        Enkel categorieën met &ge; ${CRITERIA.specMinFamilySize} producten worden getoond; een kenmerk telt enkel mee
+        als &ge; ${Math.round(CRITERIA.specRelevanceThreshold * 100)}% van die categorie het invult.</p>
+        ${technicalSpecsHTML(technicalSpecs)}      </section>
 
       <section id="datakwaliteit">
         <h2>EAN-controle &amp; opvallende gevallen</h2>
@@ -356,6 +372,49 @@ function scopeExamplesHTML(list) {
         ${ex.hasScope ? "(heeft al Desc_scope)" : "(mist Desc_scope)"}</p>
       </div>`).join("")}
   </div>`;
+}
+
+function dimensionStatsHTML(stats) {
+  const rows = [
+    ["Breedte", stats.width, "cm"], ["Lengte", stats.length, "cm"],
+    ["Hoogte", stats.height, "cm"], ["Gewicht", stats.weight, "kg"],
+  ].filter(([, s]) => s.n > 0);
+  if (!rows.length) return "";
+  return `<h3>Spreiding (over geldige waarden)</h3>
+    <table class="worklist">
+      <thead><tr><th>Afmeting</th><th>Min</th><th>Gemiddeld</th><th>Max</th><th>#</th></tr></thead>
+      <tbody>
+        ${rows.map(([label, s, unit]) => `<tr><td>${label}</td><td>${s.min} ${unit}</td><td>${s.avg} ${unit}</td><td>${s.max} ${unit}</td><td>${s.n}</td></tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function dimsImplausibleExamplesHTML(list) {
+  if (!list || !list.length) return "";
+  return `<div class="llm-examples">
+    <h3>Voorbeelden: fysiek onwaarschijnlijke afmetingen/gewicht</h3>
+    ${list.map((ex) => `<div class="llm-example">
+        <p class="note"><b>${ex.sku}</b> &mdash; ${ex.name || "(geen naam)"}: ${ex.w}&times;${ex.l}&times;${ex.h} cm
+        bij ${ex.weight} kg</p>
+      </div>`).join("")}
+  </div>`;
+}
+
+function technicalSpecsHTML(families) {
+  if (!families || !families.length) {
+    return `<p class="note">Geen categorie met &ge; ${CRITERIA.specMinFamilySize} producten en een duidelijk
+    herkenbaar technisch kenmerkenpatroon gevonden.</p>`;
+  }
+  return families.map(fam => `
+    <h3>${fam.family} <span class="pill">${fam.count} producten</span> <span class="pill sev-${fam.avgCompleteness >= 90 ? "good" : fam.avgCompleteness >= 60 ? "warn" : "bad"}">${fam.avgCompleteness}% gemiddeld</span></h3>
+    <table class="worklist">
+      <thead><tr><th>Kenmerk</th><th>Ingevuld</th><th>%</th></tr></thead>
+      <tbody>
+        ${fam.fields.map(f => `<tr><td>${f.name}</td><td>${f.filled}/${f.total}</td><td><span class="pill sev-${f.pct >= 90 ? "good" : f.pct >= 60 ? "warn" : "bad"}">${f.pct}%</span></td></tr>`).join("")}
+      </tbody>
+    </table>
+    ${fam.fields.length <= 1 ? `<p class="note">Slechts ${fam.fields.length} technisch kenmerk gedetecteerd voor deze categorie &mdash; weinig contentdiepte t.o.v. andere categorie&euml;n, controleer of hier meer specs beschikbaar/ingevuld kunnen worden.</p>` : ""}
+  `).join("");
 }
 
 function wireProductTable(container, data) {

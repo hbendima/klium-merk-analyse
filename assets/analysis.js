@@ -20,6 +20,56 @@ const CRITERIA = {
   scopeKeywordsNoMachine: /set|\bkit\b|koffer|\bpakket\b|\bcombinatie\b|\bduo\b|\btrio\b|\bbundel\b/i,
   accessoryIndicator: /\btoebehoren\b|\bonderdeel\b|\bonderdelen\b|\baccessoire\b|\breserveonderdeel\b|\bvervangonderdeel\b/i,
   minDescLen: 150, // heuristische ondergrens voor een niet-triviale NL-omschrijving
+  // Plausibiliteitsgrenzen voor genormaliseerde afmetingen/gewicht: ruim genoeg voor het
+  // gros van hardware/gereedschap, bedoeld om evidente eenheden-/invoerfouten te vangen
+  // (bv. 0,62 x 0,73 x 0,2 cm bij 280g is fysiek onmogelijk voor een hangslot).
+  // Pas gerust aan per merk/categorie indien nodig.
+  plausibleDimCm: { min: 1, max: 150 },
+  plausibleWeightKg: { min: 0.005, max: 50 },
+  // Vaste uitsluitlijst voor de "Genormaliseerde technische specificaties"-check: kolommen
+  // die NOOIT een categorie-specifiek technisch kenmerk zijn (identificatie, media, prijzen,
+  // logistieke maten/gewicht — apart al gecheckt —, teksten/titels, documenten/certificaten,
+  // ADR/gevarenklasse-chemie, admin/workflow, relationele koppelvelden). Dit is vast voor het
+  // hele Akeneo-sjabloon en geldt dus voor élk merk — geen onderhoud per merk nodig. Alles wat
+  // overblijft wordt automatisch per categorie beoordeeld op invulgraad.
+  nonSpecColumnPatterns: [
+    /^\[.*\]$/, // systeem-/relationele velden zoals [categories], [groups], [enabled]
+    /\(\[unit\]\)$/, // begeleidende eenheid-kolom hoort bij het hoofdveld, geen apart kenmerk
+    /^(Desc_long|Desc_optional|Desc_scope|Title_AS400|Title_B2B|Title_B2C|Title_supplier|Title_validated_supplier|Klium AI omschrijving|Klium title suffix|Promo omschrijving|Youtube URL hash|Niet-genormaliseerde dimensies)\b/,
+  ],
+  nonSpecColumnsExact: new Set([
+    "sku", "EAN", "Merk", "Afbeeldingen", "Assets Updated", "B2B promo afbeeldingen",
+    "Article_type", "ERP_type", "Product model", "product parent", "goodscode", "STOCK_CODE",
+    "SUPPLIER", "SUPPLIER_SKU", "Manufacturer reference", "eclass", "unspsc",
+    "Klium PIM ready", "Klium status", "Klium blacklist", "Klium comment", "Klium productname",
+    "Klium promo end", "Klium promo image", "Klium promo start", "Launch date",
+    "WEIGHT_KG", "WIDTH_CM", "LENGTH_CM", "HEIGHT_CM",
+    "Klium_price (Euro)", "[Klium_price-USD]", "SALES_PRICE (Euro)", "[SALES_PRICE-USD]",
+    "SALES_QUANTITY", "Onderhoudscontract",
+    "Certificaat", "Conformiteitsverklaring", "Prestatieverklaring", "Veiligheidsblad",
+    "Veiligheidsblad - Component A", "Veiligheidsblad - Component B", "Veiligheidsblad - Component C",
+    "Productblad", "Technische fiche", "Technische tekening", "Handleiding", "Maattabel",
+    "Brochure", "Onderdelenlijst", "Selectiegids", "REACH-verklaring", "Testrapport",
+    "Garantie leverancier", "Levertijd", "Herstelbaarheidsindex", "Laadvermogen tabel",
+    "Assemblage informatie", "Plaatsing logo", "promo images",
+    "Accessoires [groups]", "Accessoires [products]", "Accessoires [product_models]",
+    "Alternatief [groups]", "Alternatief [products]", "Alternatief [product_models]",
+    "Verbruiksartikel [groups]", "Verbruiksartikel [products]", "Verbruiksartikel [product_models]",
+    "gratis artikel [groups]", "gratis artikel [products]", "gratis artikel [product_models]",
+    "Klium cross [groups]", "Klium cross [products]", "Klium cross [product_models]",
+    "Onderdeel [groups]", "Onderdeel [products]", "Onderdeel [product_models]",
+    "Blokkeer \"Description Long scope\" waarde", "Blokkeer \"Description Long\" waarde",
+    "Blokkeer volledig Artikel", "Blokkeren waardes - omschrijving",
+    "Vlampunt", "Vlampunt ([unit])", "Gevarenklasse", "Toestand aggregaat", "Kinderbeveiliging",
+    "P-zinnen", "H-zinnen", "EUH-zinnen", "Hoofdgevaarseigenschap", "UN-code",
+    "ADR-klasse", "ADR-verpakkingsgroep", "Limited Quantity",
+    "Relatieve dichtheid", "Relatieve dichtheid ([unit])", "Chemische stoffen",
+    "Chemische resistentie", "Poetsinstructies",
+  ]),
+  // Minstens dit % van een categorie moet een kolom invullen voordat we ze als "relevant
+  // kenmerk voor deze categorie" beschouwen (voorkomt ruis van toevallig 1x ingevulde velden).
+  specRelevanceThreshold: 0.6,
+  specMinFamilySize: 3,
   defaultFields: {
     sku: "sku",
     ean: "EAN",
@@ -81,6 +131,46 @@ function detectBrand(records, fieldOverrides = {}) {
 }
 
 /**
+ * Detects category-specific "genormaliseerde" technical spec columns automatically:
+ * anything in the CSV that isn't on the fixed non-spec exclude list is a candidate. Per
+ * category/family, a column only counts as a "relevant" spec once enough products in that
+ * family actually fill it in — this needs zero manual maintenance per brand.
+ */
+function isNonSpecColumn(header) {
+  if (CRITERIA.nonSpecColumnsExact.has(header)) return true;
+  return CRITERIA.nonSpecColumnPatterns.some(re => re.test(header));
+}
+
+function technicalSpecCompleteness(rows, F) {
+  if (!rows.length) return [];
+  const headers = Object.keys(rows[0]);
+  const candidateColumns = headers.filter(h => !isNonSpecColumn(h));
+
+  const byFamily = new Map();
+  rows.forEach(r => {
+    const fam = (r[F.categories] || "").trim() || "(onbekend)";
+    if (!byFamily.has(fam)) byFamily.set(fam, []);
+    byFamily.get(fam).push(r);
+  });
+
+  const families = [];
+  for (const [family, famRows] of byFamily.entries()) {
+    if (famRows.length < CRITERIA.specMinFamilySize) continue;
+    const fields = candidateColumns
+      .map(col => {
+        const filled = famRows.filter(r => nz(r[col])).length;
+        return { name: col, filled, total: famRows.length, pct: Math.round((100 * filled) / famRows.length) };
+      })
+      .filter(f => f.filled / f.total >= CRITERIA.specRelevanceThreshold)
+      .sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name));
+    if (!fields.length) continue;
+    const avgCompleteness = Math.round(fields.reduce((s, f) => s + f.pct, 0) / fields.length);
+    families.push({ family, count: famRows.length, fields, avgCompleteness });
+  }
+  return families.sort((a, b) => b.count - a.count);
+}
+
+/**
  * Analyzes a full Akeneo product export (array of row objects keyed by CSV header)
  * and returns { data, catCounter, priceHist, kpi } — same shape used by the report renderer.
  * `fieldOverrides` lets you remap column names if a future export uses different headers.
@@ -112,6 +202,10 @@ function analyzeExport(rows, fieldOverrides = {}) {
     const dimsPresent = w !== null && l !== null && h !== null;
     const dimsValid = dimsPresent && !(w === 0 && l === 0 && h === 0);
     const weightValid = weight !== null && weight > 0;
+    const { min: minDim, max: maxDim } = CRITERIA.plausibleDimCm;
+    const dimsImplausible = dimsValid && (Math.min(w, l, h) < minDim || Math.max(w, l, h) > maxDim);
+    const { min: minW, max: maxW } = CRITERIA.plausibleWeightKg;
+    const weightImplausible = weightValid && (weight < minW || weight > maxW);
     const needsScope = scopeExpected(r, F);
     const hasScope = nz(r[F.descScope] || "");
     const kliumNameFilled = nz(r[F.kliumProductname] || "") && nz(r[F.kliumTitleSuffix] || "");
@@ -126,7 +220,7 @@ function analyzeExport(rows, fieldOverrides = {}) {
       images: imgc, imagesOk: imgc >= 1, imagesMulti: imgc >= 2,
       descNL: descPresent, descShort, descDuplicated, descText,
       needsScope, hasScope, scopeOk: needsScope ? hasScope : true,
-      dims: dimsValid, weightOk: weightValid,
+      dims: dimsValid, weightOk: weightValid, dimsImplausible, weightImplausible,
       w, l, h, weight,
       kliumNameFilled,
     };
@@ -218,18 +312,44 @@ function analyzeExport(rows, fieldOverrides = {}) {
     anomaly("priceOutlierHigh", "Prijs > 5x de mediaan (controleer of dit klopt)", "med", priceOutliersHigh),
     anomaly("priceOutlierLow", "Prijs < 10% van de mediaan (controleer of dit klopt)", "med", priceOutliersLow),
     anomaly("familyUnknown", "Categorie/familie ontbreekt", "med", data.filter(d => d.family === "(onbekend)")),
+    anomaly("dimsImplausible", "Afmetingen fysiek onwaarschijnlijk (mogelijke eenhedenfout)", "high",
+      data.filter(d => d.dimsImplausible)),
+    anomaly("weightImplausible", "Gewicht fysiek onwaarschijnlijk (mogelijke eenhedenfout)", "high",
+      data.filter(d => d.weightImplausible)),
   ].filter(a => a.count > 0);
 
+  // Spreiding van de genormaliseerde afmetingen/gewicht, enkel over geldige waarden —
+  // geeft diepte naast de loutere aanwezig/ontbreekt-check hierboven.
+  const dimStats = (values) => {
+    const v = values.filter(x => x !== null && x > 0);
+    if (!v.length) return { min: 0, max: 0, avg: 0, n: 0 };
+    return { min: Math.min(...v), max: Math.max(...v), avg: +(v.reduce((s, x) => s + x, 0) / v.length).toFixed(2), n: v.length };
+  };
+  const dimensionStats = {
+    width: dimStats(data.map(d => d.dims ? d.w : null)),
+    length: dimStats(data.map(d => d.dims ? d.l : null)),
+    height: dimStats(data.map(d => d.dims ? d.h : null)),
+    weight: dimStats(data.map(d => d.weightOk ? d.weight : null)),
+  };
+
+  const dimsImplausibleExamples = data.filter(d => d.dimsImplausible).slice(0, 8)
+    .map(d => ({ sku: d.sku, name: d.name, w: d.w, l: d.l, h: d.h, weight: d.weight }));
+
+  const technicalSpecs = technicalSpecCompleteness(rows, F);
+
   return {
-    data, catCounter, priceHist,
+    data, catCounter, priceHist, dimensionStats, technicalSpecs,
     examples: {
       descDuplicates: descDuplicateExamples, scopeFlagged: scopeExamples,
       descMissing: descMissingExamples, descShort: descShortExamples,
+      dimsImplausible: dimsImplausibleExamples,
     },
     anomalies,
     kpi: {
       total, imgMissing, imgMulti, descMissing, descDuplicated: descDuplicatedCnt, descShort: descShortCnt, descUniqueTexts,
       dimsBad, weightBad, scopeNeeded, scopeMissing, kliumNameReady, fullyReady,
+      dimsImplausible: data.filter(d => d.dimsImplausible).length,
+      weightImplausible: data.filter(d => d.weightImplausible).length,
       eanMissing, eanDuplicated: eanDuplicatedCnt, eanDuplicatedGroups: eanDuplicatedGroups.length,
       skuDuplicated: skuDuplicatedGroups.length,
       minPrice: n ? prices[0] : 0, maxPrice: n ? prices[n - 1] : 0, avgPrice, medianPrice,

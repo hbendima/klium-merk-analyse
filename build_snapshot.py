@@ -17,6 +17,50 @@ SCOPE_KEYWORDS_NO_MACHINE = re.compile(r"set|\bkit\b|koffer|\bpakket\b|\bcombina
 ACCESSORY_INDICATOR = re.compile(r"\btoebehoren\b|\bonderdeel\b|\bonderdelen\b|\baccessoire\b|\breserveonderdeel\b|\bvervangonderdeel\b", re.I)
 MIN_DESC_LEN = 150
 
+# Plausibiliteitsgrenzen voor genormaliseerde afmetingen/gewicht (zie analysis.js voor toelichting).
+PLAUSIBLE_DIM_CM = (1, 150)
+PLAUSIBLE_WEIGHT_KG = (0.005, 50)
+
+# Vaste uitsluitlijst voor "Genormaliseerde technische specificaties" (zie analysis.js:
+# CRITERIA.nonSpecColumn* voor de volledige toelichting) — geldt voor het hele Akeneo-sjabloon,
+# dus voor elk merk, geen onderhoud per merk nodig.
+NON_SPEC_COLUMN_PATTERNS = [
+    re.compile(r"^\[.*\]$"),
+    re.compile(r"\(\[unit\]\)$"),
+    re.compile(r"^(Desc_long|Desc_optional|Desc_scope|Title_AS400|Title_B2B|Title_B2C|Title_supplier|Title_validated_supplier|Klium AI omschrijving|Klium title suffix|Promo omschrijving|Youtube URL hash|Niet-genormaliseerde dimensies)\b"),
+]
+NON_SPEC_COLUMNS_EXACT = {
+    "sku", "EAN", "Merk", "Afbeeldingen", "Assets Updated", "B2B promo afbeeldingen",
+    "Article_type", "ERP_type", "Product model", "product parent", "goodscode", "STOCK_CODE",
+    "SUPPLIER", "SUPPLIER_SKU", "Manufacturer reference", "eclass", "unspsc",
+    "Klium PIM ready", "Klium status", "Klium blacklist", "Klium comment", "Klium productname",
+    "Klium promo end", "Klium promo image", "Klium promo start", "Launch date",
+    "WEIGHT_KG", "WIDTH_CM", "LENGTH_CM", "HEIGHT_CM",
+    "Klium_price (Euro)", "[Klium_price-USD]", "SALES_PRICE (Euro)", "[SALES_PRICE-USD]",
+    "SALES_QUANTITY", "Onderhoudscontract",
+    "Certificaat", "Conformiteitsverklaring", "Prestatieverklaring", "Veiligheidsblad",
+    "Veiligheidsblad - Component A", "Veiligheidsblad - Component B", "Veiligheidsblad - Component C",
+    "Productblad", "Technische fiche", "Technische tekening", "Handleiding", "Maattabel",
+    "Brochure", "Onderdelenlijst", "Selectiegids", "REACH-verklaring", "Testrapport",
+    "Garantie leverancier", "Levertijd", "Herstelbaarheidsindex", "Laadvermogen tabel",
+    "Assemblage informatie", "Plaatsing logo", "promo images",
+    "Accessoires [groups]", "Accessoires [products]", "Accessoires [product_models]",
+    "Alternatief [groups]", "Alternatief [products]", "Alternatief [product_models]",
+    "Verbruiksartikel [groups]", "Verbruiksartikel [products]", "Verbruiksartikel [product_models]",
+    "gratis artikel [groups]", "gratis artikel [products]", "gratis artikel [product_models]",
+    "Klium cross [groups]", "Klium cross [products]", "Klium cross [product_models]",
+    "Onderdeel [groups]", "Onderdeel [products]", "Onderdeel [product_models]",
+    "Blokkeer \"Description Long scope\" waarde", "Blokkeer \"Description Long\" waarde",
+    "Blokkeer volledig Artikel", "Blokkeren waardes - omschrijving",
+    "Vlampunt", "Vlampunt ([unit])", "Gevarenklasse", "Toestand aggregaat", "Kinderbeveiliging",
+    "P-zinnen", "H-zinnen", "EUH-zinnen", "Hoofdgevaarseigenschap", "UN-code",
+    "ADR-klasse", "ADR-verpakkingsgroep", "Limited Quantity",
+    "Relatieve dichtheid", "Relatieve dichtheid ([unit])", "Chemische stoffen",
+    "Chemische resistentie", "Poetsinstructies",
+}
+SPEC_RELEVANCE_THRESHOLD = 0.6
+SPEC_MIN_FAMILY_SIZE = 3
+
 FIELDS = {
     "sku": "sku", "ean": "EAN", "categories": "[categories]", "family": "[family]",
     "brand": "Merk", "images": "Afbeeldingen", "weightKg": "WEIGHT_KG",
@@ -68,6 +112,41 @@ def strip_html(html):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]*>", " ", html)).strip()
 
 
+def is_non_spec_column(header):
+    if header in NON_SPEC_COLUMNS_EXACT:
+        return True
+    return any(p.search(header) for p in NON_SPEC_COLUMN_PATTERNS)
+
+
+def technical_spec_completeness(rows):
+    if not rows:
+        return []
+    headers = list(rows[0].keys())
+    candidate_columns = [h for h in headers if not is_non_spec_column(h)]
+
+    by_family = {}
+    for r in rows:
+        fam = (r.get(FIELDS["categories"], "") or "").strip() or "(onbekend)"
+        by_family.setdefault(fam, []).append(r)
+
+    families = []
+    for family, fam_rows in by_family.items():
+        if len(fam_rows) < SPEC_MIN_FAMILY_SIZE:
+            continue
+        fields = []
+        for col in candidate_columns:
+            filled = sum(1 for r in fam_rows if nz(r.get(col, "")))
+            if filled / len(fam_rows) >= SPEC_RELEVANCE_THRESHOLD:
+                fields.append({"name": col, "filled": filled, "total": len(fam_rows),
+                               "pct": round(100 * filled / len(fam_rows))})
+        if not fields:
+            continue
+        fields.sort(key=lambda f: (-f["pct"], f["name"]))
+        avg_completeness = round(sum(f["pct"] for f in fields) / len(fields))
+        families.append({"family": family, "count": len(fam_rows), "fields": fields, "avgCompleteness": avg_completeness})
+    return sorted(families, key=lambda f: -f["count"])
+
+
 def analyze(rows):
     desc_counter = Counter()
     desc_to_skus = {}
@@ -91,6 +170,8 @@ def analyze(rows):
         dims_present = w is not None and l is not None and h is not None
         dims_valid = dims_present and not (w == 0 and l == 0 and h == 0)
         weight_valid = weight is not None and weight > 0
+        dims_implausible = dims_valid and (min(w, l, h) < PLAUSIBLE_DIM_CM[0] or max(w, l, h) > PLAUSIBLE_DIM_CM[1])
+        weight_implausible = weight_valid and (weight < PLAUSIBLE_WEIGHT_KG[0] or weight > PLAUSIBLE_WEIGHT_KG[1])
         needs_scope = scope_expected(r)
         has_scope = nz(r.get(FIELDS["descScope"], ""))
         klium_name_filled = nz(r.get(FIELDS["kliumProductname"], "")) and nz(r.get(FIELDS["kliumTitleSuffix"], ""))
@@ -102,7 +183,7 @@ def analyze(rows):
             "images": imgc, "imagesOk": imgc >= 1, "imagesMulti": imgc >= 2,
             "descNL": desc_present, "descShort": desc_short, "descDuplicated": desc_duplicated, "descText": desc_text,
             "needsScope": needs_scope, "hasScope": has_scope, "scopeOk": has_scope if needs_scope else True,
-            "dims": dims_valid, "weightOk": weight_valid,
+            "dims": dims_valid, "weightOk": weight_valid, "dimsImplausible": dims_implausible, "weightImplausible": weight_implausible,
             "w": w, "l": l, "h": h, "weight": weight,
             "kliumNameFilled": klium_name_filled,
         })
@@ -141,6 +222,8 @@ def analyze(rows):
         "eanMissing": ean_missing, "eanDuplicated": ean_duplicated_cnt,
         "eanDuplicatedGroups": len(ean_duplicated_groups), "skuDuplicated": len(sku_duplicated_groups),
         "familyCount": len(cat_counter),
+        "dimsImplausible": cnt(lambda d: d["dimsImplausible"]),
+        "weightImplausible": cnt(lambda d: d["weightImplausible"]),
     })
 
     prices = sorted(d["price"] for d in data if d["price"] is not None)
@@ -185,6 +268,8 @@ def analyze(rows):
         anomaly("priceOutlierHigh", "Prijs > 5x de mediaan (controleer of dit klopt)", "med", price_outliers_high),
         anomaly("priceOutlierLow", "Prijs < 10% van de mediaan (controleer of dit klopt)", "med", price_outliers_low),
         anomaly("familyUnknown", "Categorie/familie ontbreekt", "med", [d for d in data if d["family"] == "(onbekend)"]),
+        anomaly("dimsImplausible", "Afmetingen fysiek onwaarschijnlijk (mogelijke eenhedenfout)", "high", [d for d in data if d["dimsImplausible"]]),
+        anomaly("weightImplausible", "Gewicht fysiek onwaarschijnlijk (mogelijke eenhedenfout)", "high", [d for d in data if d["weightImplausible"]]),
     ]
     anomalies = [a for a in anomalies if a["count"] > 0]
 
@@ -207,10 +292,29 @@ def analyze(rows):
             "sku": d["sku"], "name": d["name"], "family": d["family"],
             "preview": strip_html(d["descText"])[:180], "length": len(d["descText"]),
         } for d in data if d["descShort"]][:12],
+        "dimsImplausible": [{
+            "sku": d["sku"], "name": d["name"], "w": d["w"], "l": d["l"], "h": d["h"], "weight": d["weight"],
+        } for d in data if d["dimsImplausible"]][:8],
     }
 
+    def dim_stats(values):
+        v = [x for x in values if x is not None and x > 0]
+        if not v:
+            return {"min": 0, "max": 0, "avg": 0, "n": 0}
+        return {"min": min(v), "max": max(v), "avg": round(sum(v) / len(v), 2), "n": len(v)}
+
+    dimension_stats = {
+        "width": dim_stats([d["w"] if d["dims"] else None for d in data]),
+        "length": dim_stats([d["l"] if d["dims"] else None for d in data]),
+        "height": dim_stats([d["h"] if d["dims"] else None for d in data]),
+        "weight": dim_stats([d["weight"] if d["weightOk"] else None for d in data]),
+    }
+
+    technical_specs = technical_spec_completeness(rows)
+
     return {"data": data, "catCounter": dict(cat_counter), "priceHist": price_hist, "kpi": kpi,
-            "examples": examples, "anomalies": anomalies}
+            "examples": examples, "anomalies": anomalies, "dimensionStats": dimension_stats,
+            "technicalSpecs": technical_specs}
 
 
 def main():
