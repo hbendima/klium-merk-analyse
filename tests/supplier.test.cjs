@@ -130,6 +130,42 @@ test("JavaScript files and inline page scripts compile", () => {
   assert.equal(load().escapeHTML('Supplier <A> & "B"'), "Supplier &lt;A&gt; &amp; &quot;B&quot;");
 });
 
+test("history groups suppliers, preserves row indices and distinguishes repeated analyses", () => {
+  const elements = new Map();
+  const element = id => {
+    if (!elements.has(id)) elements.set(id, {
+      innerHTML: "", classList: { add() {}, remove() {} }, querySelectorAll: () => [],
+    });
+    return elements.get(id);
+  };
+  const context = load({
+    document: { getElementById: element, querySelectorAll: () => [] },
+  });
+  const html = fs.readFileSync(path.join(root, "history.html"), "utf8");
+  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1];
+  const definitions = script.slice(0, script.indexOf('  document.querySelectorAll("#historyTable th[data-key]")'));
+  vm.runInContext(definitions, context);
+  vm.runInContext('function updateCompareBtn() {}', context);
+  const snapshots = analyses(context);
+  context.samples = [
+    { ...snapshots[0], supplier: "Supplier B", origin: "shared" },
+    { ...snapshots[1], supplier: "Supplier A", origin: "local", localIndex: 9 },
+    { ...snapshots[2], supplier: " supplier b " },
+    { ...snapshots[0], supplier: "" },
+    { ...snapshots[1], supplier: "Supplier A" },
+  ];
+  vm.runInContext('allSnapshots = samples; sortState = { key: "brand", dir: 1 }; renderTable();', context);
+  const output = element("historyBody").innerHTML;
+  assert.equal((output.match(/class="supplier-group"/g) || []).length, 3);
+  assert.match(output, /Losse merken \(geen leverancier vermeld\)/);
+  assert.match(output, /2 merken &middot; 4 producten/);
+  assert.match(output, /1 merk &middot; 2 producten &middot; 2 analyses/);
+  for (let i = 0; i < 5; i++) assert.match(output, new RegExp(`data-view="${i}"`));
+  assert.match(output, /data-del="9"/);
+  vm.runInContext('sortState = { key: "total", dir: -1 }; renderTable();', context);
+  assert.equal((element("historyBody").innerHTML.match(/class="supplier-group"/g) || []).length, 3);
+});
+
 test("Python CLI produces matching supplier groups and preserves the legacy command", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "klium-supplier-"));
   try {

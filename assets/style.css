@@ -97,6 +97,10 @@ details.advanced .field{margin-top:8px;}
 #historyTable tr:hover .history-actions{background:#20303f;}
 .history-action-buttons{display:flex;flex-direction:column;gap:6px;}
 .history-action-buttons button{white-space:nowrap;padding:7px 8px;font-size:12px;}
+#historyTable .supplier-group th{position:static;background:#16334a;border-top:2px solid var(--accent);cursor:default;color:var(--text);padding:14px 12px;}
+.supplier-group-heading{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;}
+.supplier-group-heading strong{font-size:14px;color:var(--accent);}
+.supplier-group-heading span{font-size:12px;font-weight:400;}
 .history-page .legend{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;}
 .history-page .legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;}
 @media(max-width:700px){

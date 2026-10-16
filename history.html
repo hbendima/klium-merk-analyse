@@ -37,6 +37,8 @@
 
   <section id="listSection">
     <h2>Overzicht</h2>
+    <p class="note">Merken staan gegroepeerd per leverancier. Klik op een kolomkop om binnen de groepen te sorteren.
+      De producttotalen tellen alle getoonde analyses mee, ook als een merk meermaals is opgeslagen.</p>
     <div class="controls">
       <button id="compareBtn" disabled>Vergelijk geselecteerde</button>
       <button id="clearLocalBtn" class="secondary">Wis lokale geschiedenis</button>
@@ -151,7 +153,23 @@
       return (av > bv ? 1 : av < bv ? -1 : 0) * sortState.dir;
     });
 
-    tbody.innerHTML = rows.map(sum => `<tr>
+    const groups = new Map();
+    for (const row of rows) {
+      const supplier = row.supplier.trim();
+      const key = supplier.toLowerCase();
+      if (!groups.has(key)) groups.set(key, { supplier, rows: [] });
+      groups.get(key).rows.push(row);
+    }
+    tbody.innerHTML = [...groups.values()].map(group => {
+      const brandCount = new Set(group.rows.map(row => row.brand.trim().toLowerCase())).size;
+      const total = group.rows.reduce((sum, row) => sum + row.total, 0);
+      const repeated = group.rows.length > brandCount ? ` &middot; ${group.rows.length} analyses` : "";
+      return `<tr class="supplier-group"><th colspan="14" scope="rowgroup">
+          <div class="supplier-group-heading">
+            <strong>${group.supplier ? `Leverancier: ${escapeHTML(group.supplier)}` : "Losse merken (geen leverancier vermeld)"}</strong>
+            <span>${brandCount} merk${brandCount === 1 ? "" : "en"} &middot; ${total} producten${repeated}</span>
+          </div>
+        </th></tr>` + group.rows.map(sum => `<tr>
         <td class="checkbox-cell"><input type="checkbox" data-idx="${sum.idx}" class="rowCheck"></td>
         <td class="history-brand"><b>${escapeHTML(sum.brand)}</b>
           <span class="history-source" title="${escapeHTML(sum.sourceFile)}">${escapeHTML(sum.sourceFile)}</span>
@@ -172,8 +190,10 @@
             ${sum.origin === "local" ? `<button class="secondary" data-del="${sum.localIndex}">Verwijder</button>` : ""}
           </div></td>
       </tr>`).join("");
+    }).join("");
 
     tbody.querySelectorAll(".rowCheck").forEach(cb => cb.addEventListener("change", updateCompareBtn));
+    updateCompareBtn();
     tbody.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => {
       deleteFromLocalHistory(parseInt(btn.dataset.del, 10));
       loadAll();
