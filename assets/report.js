@@ -1,9 +1,15 @@
 /* Renders the full onboarding report (KPIs, assortment, price, content, logistics,
    worklist, conclusion, product table) into a container, given an analysis snapshot
-   { brand, date, sourceFile, result: { data, catCounter, priceHist, kpi } }. */
+   { brand, supplier?, date, sourceFile, result: { data, catCounter, priceHist, kpi } }. */
 
 function pct(n, total) { return total ? Math.round((100 * n) / total) : 0; }
 function eur(n) { return "€ " + (n ?? 0).toFixed(2).replace(".", ","); }
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[ch]);
+}
 
 function readyClass(readyPct) {
   return readyPct >= 70 ? "good" : readyPct >= 40 ? "warn" : "bad";
@@ -92,7 +98,7 @@ function anomaliesHTML(anomalies, total) {
 }
 
 async function renderReport(container, snapshot) {
-  const { brand, date, sourceFile, result } = snapshot;
+  const { brand, supplier, date, sourceFile, result } = snapshot;
   const { data, catCounter, priceHist, kpi, examples, anomalies, dimensionStats, technicalSpecs } = result;
   const total = kpi.total;
   const rp = pct(kpi.fullyReady, total);
@@ -110,8 +116,10 @@ async function renderReport(container, snapshot) {
 
   container.innerHTML = `
     <header>
-      <h1>${brand} &ndash; Volledige Onboarding-analyse<span class="badge no">Nog niet op Klium</span></h1>
-      <p>Analyse op basis van een volledige Akeneo-productexport (${total} producten uit "${sourceFile}",
+      <h1>${escapeHTML(brand)} &ndash; Volledige Onboarding-analyse<span class="badge no">Nog niet op Klium</span></h1>
+      ${supplier ? `<p><b>Leverancier:</b> ${escapeHTML(supplier)} &mdash; afzonderlijke analyse voor dit merk.</p>` : ""}
+      ${snapshot.missingBrand ? '<p class="status-msg error">Deze producten hebben geen merkwaarde. Vul het merk aan in de bronexport.</p>' : ""}
+      <p>Analyse op basis van een Akeneo-productexport (${total} producten uit "${escapeHTML(sourceFile)}",
       geanalyseerd op ${new Date(date).toLocaleDateString("nl-BE")}). Criteria: foto's &ge;1 verplicht, NL lange
       omschrijving altijd verplicht (incl. kwaliteitscheck op hergebruikte tekst), leveringsomvang (Desc_scope) enkel
       verplicht bij sets/kits/koffers, Desc_optional en Title_B2C worden genegeerd, Klium productnaam/title suffix pas

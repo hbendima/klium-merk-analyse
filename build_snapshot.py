@@ -4,10 +4,13 @@ in webtool/data/history/ and shown under "gedeeld" in history.html for any brand
 
 Usage:
     python build_snapshot.py <csv_path> [brand_name] [output_json_path]
+    python build_snapshot.py <csv_path> --supplier <supplier_name> [--output <output_json_path>]
 
 If brand_name is omitted, it's auto-detected from the most common value in the "Merk" column.
 If output_json_path is omitted, it's written to data/history/<brand>_<date>.json.
+Supplier mode writes a bundle containing a separate snapshot per brand.
 """
+import argparse
 import csv, json, re, sys, os
 from collections import Counter
 from datetime import datetime, timezone
@@ -319,33 +322,76 @@ def analyze(rows):
             "technicalSpecs": technical_specs}
 
 
+def analyze_supplier(rows, supplier, source_file):
+    supplier = supplier.strip()
+    if not supplier:
+        raise ValueError("Vul de leveranciersnaam in.")
+    if not rows:
+        raise ValueError("Geen rijen gevonden in dit bestand.")
+    if FIELDS["brand"] not in rows[0]:
+        raise ValueError('Merk-kolom "Merk" ontbreekt.')
+    groups = {}
+    for row in rows:
+        value = row.get(FIELDS["brand"], "") or ""
+        brand = value.strip() if nz(value) else ""
+        group = groups.setdefault(brand.lower(), {
+            "brand": brand or "(Onbekend merk)", "missingBrand": not brand, "rows": [],
+        })
+        group["rows"].append(row)
+    date = datetime.now(timezone.utc).isoformat()
+    snapshots = [{
+        "brand": group["brand"], "supplier": supplier, "sourceFile": source_file,
+        "date": date, "missingBrand": group["missingBrand"], "result": analyze(group["rows"]),
+    } for group in groups.values()]
+    return {"supplier": supplier, "date": date, "sourceFile": source_file, "snapshots": snapshots}
+
+
 def main():
-    if len(sys.argv) < 2:
-        print("Gebruik: python build_snapshot.py <csv_path> [brand_name] [output_json_path]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("csv_path")
+    parser.add_argument("brand_name", nargs="?")
+    parser.add_argument("output_json_path", nargs="?")
+    parser.add_argument("--supplier", help="Splits de CSV per merk, met deze leveranciersnaam.")
+    parser.add_argument("--output", help="Pad voor de JSON-snapshot of leveranciersbundel.")
+    args = parser.parse_args()
+    if args.supplier is not None and (args.brand_name or args.output_json_path):
+        parser.error("Gebruik bij --supplier geen merknaam; kies het uitvoerpad met --output.")
+    if args.output and args.output_json_path:
+        parser.error("Geef slechts een uitvoerpad op.")
 
-    csv_path = sys.argv[1]
-    with open(csv_path, encoding="utf-8-sig", newline="") as f:
+    with open(args.csv_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f, delimiter=";"))
-
-    brand = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else detect_brand(rows)
-    result = analyze(rows)
-    snapshot = {
-        "brand": brand, "date": datetime.now(timezone.utc).isoformat(),
-        "sourceFile": os.path.basename(csv_path), "result": result,
-    }
-
-    if len(sys.argv) > 3 and sys.argv[3]:
-        out_path = sys.argv[3]
+    if not rows:
+        parser.error("Geen rijen gevonden in dit bestand.")
+    source_file = os.path.basename(args.csv_path)
+    if args.supplier is not None:
+        try:
+            snapshot = analyze_supplier(rows, args.supplier, source_file)
+        except ValueError as exc:
+            parser.error(str(exc))
+        name = snapshot["supplier"]
+        detail = f"{len(snapshot['snapshots'])} merkgroepen, {len(rows)} producten"
+        missing = next((s for s in snapshot["snapshots"] if s["missingBrand"]), None)
+        if missing:
+            print(f"Let op: {missing['result']['kpi']['total']} producten zonder merk staan apart onder '(Onbekend merk)'.", file=sys.stderr)
     else:
-        safe_brand = re.sub(r"[^a-z0-9]+", "_", brand.lower())
+        name = args.brand_name or detect_brand(rows)
+        snapshot = {
+            "brand": name, "date": datetime.now(timezone.utc).isoformat(),
+            "sourceFile": source_file, "result": analyze(rows),
+        }
+        detail = f"{len(rows)} producten"
+
+    out_path = args.output or args.output_json_path
+    if not out_path:
+        safe_brand = re.sub(r"[^a-z0-9]+", "_", name.lower()) or "analyse"
         out_path = os.path.join("data", "history", f"{safe_brand}_{datetime.now().strftime('%Y-%m-%d')}.json")
 
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False)
 
-    print(f"OK: {brand} -> {out_path} ({result['kpi']['total']} producten)")
+    print(f"OK: {name} -> {out_path} ({detail})")
     return out_path
 
 

@@ -8,7 +8,7 @@
 <script src="assets/auth.js"></script>
 <script>guardPage();</script>
 </head>
-<body>
+<body class="history-page">
 
 <header>
   <h1>Geschiedenis &amp; vergelijking</h1>
@@ -49,14 +49,21 @@
     <div id="emptyState" class="hidden">
       <p class="note">Nog geen analyses opgeslagen. Ga naar <a href="index.html">Analyseren</a> om een eerste CSV-export te verwerken.</p>
     </div>
-    <div class="scroll-table">
+    <div class="scroll-table history-scroll" tabindex="0" role="region" aria-label="Merkanalyses, horizontaal scrollbaar op smalle schermen">
     <table id="historyTable">
+      <colgroup>
+        <col style="width:28px"><col style="width:125px"><col style="width:110px">
+        <col style="width:82px"><col style="width:32px"><col style="width:84px">
+        <col style="width:48px"><col style="width:55px"><col style="width:78px">
+        <col style="width:60px"><col style="width:65px"><col style="width:48px">
+        <col style="width:48px"><col style="width:130px">
+      </colgroup>
       <thead>
         <tr>
           <th></th>
           <th data-key="brand">Merk</th>
+          <th data-key="supplier">Leverancier</th>
           <th data-key="date">Datum</th>
-          <th>Bron</th>
           <th data-key="total">#</th>
           <th data-key="readyPct">Verkoopklaar</th>
           <th data-key="imgOkPct">Foto</th>
@@ -66,7 +73,7 @@
           <th data-key="avgPrice">Gem. prijs</th>
           <th data-key="under20Pct">&lt;&euro;20</th>
           <th data-key="over50Pct">&ge;&euro;50</th>
-          <th></th>
+          <th class="history-actions">Acties</th>
         </tr>
       </thead>
       <tbody id="historyBody"></tbody>
@@ -146,20 +153,24 @@
 
     tbody.innerHTML = rows.map(sum => `<tr>
         <td class="checkbox-cell"><input type="checkbox" data-idx="${sum.idx}" class="rowCheck"></td>
-        <td><b>${sum.brand}</b></td>
-        <td>${new Date(sum.date).toLocaleDateString("nl-BE")}</td>
-        <td title="${sum.sourceFile}">${sum.sourceFile.length > 28 ? sum.sourceFile.slice(0, 25) + "…" : sum.sourceFile} <span class="pill">${sum.origin === "local" ? "lokaal" : "gedeeld"}</span></td>
+        <td class="history-brand"><b>${escapeHTML(sum.brand)}</b>
+          <span class="history-source" title="${escapeHTML(sum.sourceFile)}">${escapeHTML(sum.sourceFile)}</span>
+          <span class="pill">${sum.origin === "local" ? "lokaal" : "gedeeld"}</span></td>
+        <td class="history-supplier">${escapeHTML(sum.supplier || "\u2014")}</td>
+        <td class="history-number">${new Date(sum.date).toLocaleDateString("nl-BE")}</td>
         <td>${sum.total}</td>
         <td>${pctBadge(sum.readyPct)}</td>
         <td>${pctBadge(sum.imgOkPct)}</td>
         <td>${pctBadge(sum.descOkPct)}</td>
         <td>${pctBadge(sum.dimsOkPct)}</td>
         <td>${pctBadge(sum.weightOkPct)}</td>
-        <td>&euro; ${sum.avgPrice.toFixed(2)}</td>
+        <td class="history-number">&euro; ${sum.avgPrice.toFixed(2)}</td>
         <td>${sum.under20Pct}%</td>
         <td>${sum.over50Pct}%</td>
-        <td>${sum.origin === "local" ? `<button class="secondary" data-del="${sum.localIndex}">Verwijder</button>` : ""}
-            <button class="secondary" data-view="${sum.idx}">Bekijk rapport</button></td>
+        <td class="history-actions"><div class="history-action-buttons">
+            <button class="secondary" data-view="${sum.idx}">Bekijk rapport</button>
+            ${sum.origin === "local" ? `<button class="secondary" data-del="${sum.localIndex}">Verwijder</button>` : ""}
+          </div></td>
       </tr>`).join("");
 
     tbody.querySelectorAll(".rowCheck").forEach(cb => cb.addEventListener("change", updateCompareBtn));
@@ -201,7 +212,8 @@
 
   function renderCompare(selected) {
     const rows = [
-      ["Merk", s => s.brand],
+      ["Merk", s => escapeHTML(s.brand)],
+      ["Leverancier", s => escapeHTML(s.supplier || "\u2014")],
       ["Datum", s => new Date(s.date).toLocaleDateString("nl-BE")],
       ["Aantal producten", s => summarize(s).total],
       ["Verkoopklaar", s => pctBadge(summarize(s).readyPct)],
@@ -215,7 +227,7 @@
     ];
     const table = document.getElementById("compareTable");
     table.innerHTML = `
-      <thead><tr><th>Criterium</th>${selected.map(s => `<th>${s.brand}</th>`).join("")}</tr></thead>
+      <thead><tr><th>Criterium</th>${selected.map(s => `<th>${escapeHTML(s.brand)}${s.supplier ? `<br>${escapeHTML(s.supplier)}` : ""}</th>`).join("")}</tr></thead>
       <tbody>${rows.map(([label, fn]) => `<tr><td>${label}</td>${selected.map(s => `<td>${fn(s)}</td>`).join("")}</tr>`).join("")}</tbody>
     `;
     document.getElementById("compareSection").classList.remove("hidden");
@@ -238,10 +250,10 @@
     if (!file) return;
     try {
       const snapshot = JSON.parse(await file.text());
-      if (!snapshot.brand || !snapshot.result) throw new Error("Onherkenbaar snapshot-formaat.");
-      saveToLocalHistory(snapshot);
+      const snapshots = unpackSnapshots(snapshot);
+      saveSnapshotsToLocalHistory(snapshots);
       document.getElementById("importStatus").innerHTML =
-        `<div class="status-msg ok">"${snapshot.brand}" (${new Date(snapshot.date).toLocaleDateString("nl-BE")}) toegevoegd aan de lokale geschiedenis.</div>`;
+        `<div class="status-msg ok">${snapshots.length} merkanalyse(s)${snapshot.supplier ? ` van ${escapeHTML(snapshot.supplier)}` : ""} toegevoegd aan de lokale geschiedenis.</div>`;
       loadAll();
     } catch (err) {
       document.getElementById("importStatus").innerHTML =

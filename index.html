@@ -26,11 +26,22 @@
   <section id="upload">
     <h2>1. CSV inladen</h2>
     <div class="dropzone" id="dropzone">
-      Sleep hier je CSV-export naartoe, of klik om een bestand te kiezen.
+      <span id="fileLabel">Sleep hier je CSV-export naartoe, of klik om een bestand te kiezen.</span>
       <input type="file" id="fileInput" accept=".csv" class="hidden">
     </div>
     <div class="upload-form">
       <div class="field">
+        <label for="analysisMode">Type export</label>
+        <select id="analysisMode">
+          <option value="brand">E&eacute;n merk</option>
+          <option value="supplier">Leverancier met meerdere merken</option>
+        </select>
+      </div>
+      <div class="field hidden" id="supplierField">
+        <label for="supplierName">Leveranciersnaam (verplicht)</label>
+        <input type="text" id="supplierName" placeholder="Naam van de leverancier">
+      </div>
+      <div class="field" id="brandField">
         <label for="brandName">Merknaam</label>
         <input type="text" id="brandName" placeholder="wordt gedetecteerd uit 'Merk'-kolom, of typ zelf">
       </div>
@@ -49,7 +60,7 @@
       <div class="field"><label for="f_descScope">Desc_scope</label><input type="text" id="f_descScope" value="Desc_scope (Nederlands België)"></div>
       <div class="field"><label for="f_price">Prijsveld</label><input type="text" id="f_price" value="Klium_price (Euro)"></div>
       <div class="field"><label for="f_images">Afbeeldingen-veld</label><input type="text" id="f_images" value="Afbeeldingen"></div>
-      <div class="field"><label for="f_brand">Merk-veld (voor auto-detectie)</label><input type="text" id="f_brand" value="Merk"></div>
+      <div class="field"><label for="f_brand">Merk-veld (voor auto-detectie / opsplitsing)</label><input type="text" id="f_brand" value="Merk"></div>
     </details>
     <div id="statusMsg"></div>
   </section>
@@ -59,6 +70,11 @@
     <div class="controls">
       <button id="saveLocalBtn">Opslaan in geschiedenis (dit toestel)</button>
       <button id="downloadBtn" class="secondary">Download JSON-snapshot (voor repo/team)</button>
+    </div>
+    <div id="supplierOverview" class="hidden"></div>
+    <div class="field hidden" id="brandSelectorField">
+      <label for="brandSelector">Volledig rapport per merk</label>
+      <select id="brandSelector"></select>
     </div>
     <div id="reportRoot"></div>
   </section>
@@ -78,9 +94,34 @@
   const brandNameInput = document.getElementById("brandName");
   const reportSection = document.getElementById("reportSection");
   const reportRoot = document.getElementById("reportRoot");
+  const analysisMode = document.getElementById("analysisMode");
+  const supplierNameInput = document.getElementById("supplierName");
+  const brandSelector = document.getElementById("brandSelector");
+  const supplierOverview = document.getElementById("supplierOverview");
 
   let pendingFile = null;
-  let currentSnapshot = null;
+  let currentSnapshots = [];
+
+  analysisMode.addEventListener("change", () => {
+    const supplierMode = analysisMode.value === "supplier";
+    document.getElementById("supplierField").classList.toggle("hidden", !supplierMode);
+    document.getElementById("brandField").classList.toggle("hidden", supplierMode);
+    currentSnapshots = [];
+    reportSection.classList.add("hidden");
+  });
+
+  brandSelector.addEventListener("change", async () => {
+    brandSelector.disabled = true;
+    try {
+      await renderReport(reportRoot, currentSnapshots[Number(brandSelector.value)]);
+    } catch (err) {
+      console.error(err);
+      reportRoot.textContent = "";
+      showStatus("Kon het merkrapport niet openen: " + err.message, "error");
+    } finally {
+      brandSelector.disabled = false;
+    }
+  });
 
   dropzone.addEventListener("click", () => fileInput.click());
   dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("drag"); });
@@ -95,21 +136,23 @@
 
   function setFile(file) {
     pendingFile = file;
-    dropzone.textContent = `Geselecteerd: ${file.name}`;
+    currentSnapshots = [];
+    reportSection.classList.add("hidden");
+    document.getElementById("fileLabel").textContent = `Geselecteerd: ${file.name}`;
     analyzeBtn.disabled = false;
     statusMsg.innerHTML = "";
     detectAndFillBrand(file);
   }
 
   async function detectAndFillBrand(file) {
-    if (brandNameInput.value.trim()) return; // don't override a name the user already typed
+    if (analysisMode.value === "supplier" || brandNameInput.value.trim()) return;
     try {
       const delimiter = document.getElementById("delimiter").value;
       const text = await file.text();
       const { records } = csvToObjects(text, delimiter);
       const brandField = document.getElementById("f_brand").value.trim();
       const detected = detectBrand(records, brandField ? { brand: brandField } : {});
-      if (detected && !brandNameInput.value.trim()) {
+      if (detected && pendingFile === file && analysisMode.value === "brand" && !brandNameInput.value.trim()) {
         brandNameInput.value = detected;
       }
     } catch {
@@ -118,11 +161,19 @@
   }
 
   function showStatus(msg, type) {
-    statusMsg.innerHTML = `<div class="status-msg ${type}">${msg}</div>`;
+    statusMsg.innerHTML = `<div class="status-msg ${type}">${escapeHTML(msg)}</div>`;
   }
 
   analyzeBtn.addEventListener("click", async () => {
     if (!pendingFile) return;
+    const file = pendingFile;
+    const supplierMode = analysisMode.value === "supplier";
+    const supplier = supplierNameInput.value.trim();
+    if (supplierMode && !supplier) {
+      showStatus("Vul de leveranciersnaam in.", "error");
+      supplierNameInput.focus();
+      return;
+    }
     const brand = brandNameInput.value.trim() || "Onbekend merk";
     const delimiter = document.getElementById("delimiter").value;
     const overrideInputs = {
@@ -134,35 +185,75 @@
     };
     const fieldOverrides = {};
     Object.entries(overrideInputs).forEach(([k, v]) => { if (v) fieldOverrides[k] = v; });
+    currentSnapshots = [];
+    reportSection.classList.add("hidden");
+    analyzeBtn.disabled = true;
     try {
-      const text = await pendingFile.text();
-      const { headers, records } = csvToObjects(text, delimiter);
+      const text = await file.text();
+      const { records } = csvToObjects(text, delimiter);
       if (!records.length) { showStatus("Geen rijen gevonden in dit bestand.", "error"); return; }
 
-      const result = analyzeExport(records, fieldOverrides);
-      currentSnapshot = {
-        brand, date: new Date().toISOString(), sourceFile: pendingFile.name, result,
-      };
-      await renderReport(reportRoot, currentSnapshot);
+      const snapshots = supplierMode
+        ? analyzeSupplierExport(records, supplier, file.name, fieldOverrides)
+        : [{ brand, date: new Date().toISOString(), sourceFile: file.name, result: analyzeExport(records, fieldOverrides) }];
+      await renderReport(reportRoot, snapshots[0]);
+      if (pendingFile !== file || (analysisMode.value === "supplier") !== supplierMode) return;
+      currentSnapshots = snapshots;
+      supplierOverview.classList.toggle("hidden", !supplierMode);
+      document.getElementById("brandSelectorField").classList.toggle("hidden", !supplierMode);
+      if (supplierMode) {
+        brandSelector.replaceChildren(...snapshots.map((s, i) => {
+          const option = document.createElement("option");
+          option.value = i;
+          option.textContent = `${s.brand} (${s.result.kpi.total} producten)`;
+          return option;
+        }));
+        supplierOverview.innerHTML = `
+          <h3>Leverancier: ${escapeHTML(supplier)}</h3>
+          <p>${records.length} producten, opgesplitst in ${snapshots.length} merkgroepen.
+          Opslaan en downloaden bewaart alle onderstaande merken.</p>
+          <div class="scroll-table"><table>
+            <thead><tr><th>Merk</th><th>Producten</th><th>Verkoopklaar</th></tr></thead>
+            <tbody>${snapshots.map(s => `<tr><td>${escapeHTML(s.brand)}</td><td>${s.result.kpi.total}</td>
+              <td>${pct(s.result.kpi.fullyReady, s.result.kpi.total)}%</td></tr>`).join("")}</tbody>
+          </table></div>`;
+      }
       reportSection.classList.remove("hidden");
-      showStatus(`Analyse voltooid: ${result.kpi.total} producten verwerkt.`, "ok");
+      const missing = snapshots.find(s => s.missingBrand);
+      showStatus(`Analyse voltooid: ${records.length} producten verwerkt${supplierMode ? ` in ${snapshots.length} merkgroepen voor ${supplier}` : ""}.${missing ? ` Let op: ${missing.result.kpi.total} producten zonder merk staan apart onder '(Onbekend merk)'.` : ""}`, "ok");
       reportSection.scrollIntoView({ behavior: "smooth" });
     } catch (err) {
       console.error(err);
       showStatus("Er ging iets mis bij het inlezen/analyseren van dit bestand: " + err.message, "error");
+    } finally {
+      analyzeBtn.disabled = !pendingFile;
     }
   });
 
   document.getElementById("saveLocalBtn").addEventListener("click", () => {
-    if (!currentSnapshot) return;
-    saveToLocalHistory(currentSnapshot);
-    showStatus("Analyse bewaard in de lokale geschiedenis van dit toestel (zie 'Geschiedenis &amp; vergelijking').", "ok");
+    if (!currentSnapshots.length) return;
+    try {
+      saveSnapshotsToLocalHistory(currentSnapshots);
+      showStatus(`${currentSnapshots.length} merkanalyse(s) bewaard in de lokale geschiedenis van dit toestel (zie 'Geschiedenis & vergelijking').`, "ok");
+    } catch (err) {
+      console.error(err);
+      showStatus("Kon de analyses niet bewaren: " + err.message, "error");
+    }
   });
 
   document.getElementById("downloadBtn").addEventListener("click", () => {
-    if (!currentSnapshot) return;
-    const fileName = downloadSnapshot(currentSnapshot);
-    showStatus(`JSON-snapshot gedownload als "${fileName}". Plaats dit bestand in data/history/ en voeg de bestandsnaam toe aan data/history/manifest.json om het permanent te delen via GitHub Pages.`, "ok");
+    if (!currentSnapshots.length) return;
+    try {
+      const first = currentSnapshots[0];
+      const payload = first.supplier
+        ? { supplier: first.supplier, date: first.date, sourceFile: first.sourceFile, snapshots: currentSnapshots }
+        : first;
+      const fileName = downloadSnapshot(payload);
+      showStatus(`JSON-snapshot gedownload als "${fileName}" (${currentSnapshots.length} merkanalyse(s)). Plaats dit bestand in data/history/ en voeg de bestandsnaam toe aan data/history/manifest.json om het permanent te delen via GitHub Pages.`, "ok");
+    } catch (err) {
+      console.error(err);
+      showStatus("Kon de analyses niet downloaden: " + err.message, "error");
+    }
   });
 </script>
 </body>

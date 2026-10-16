@@ -88,6 +88,47 @@ password protection) de enige echte oplossing.
      enkel in deze browser (localStorage).
    - **Download JSON-snapshot** → voor permanente/gedeelde opslag, zie hieronder.
 
+### Leveranciers-CSV met meerdere merken
+
+1. Kies bij **Type export** voor **Leverancier met meerdere merken**.
+2. Vul de **leveranciersnaam** in en laad de Akeneo-CSV van die leverancier.
+3. Klik **Analyseer**. De tool groepeert de producten op de kolom `Merk`
+   (aanpasbaar onder **Geavanceerd**) en voert de bestaande kwaliteitschecks per merk uit.
+4. Het leveranciersoverzicht toont aantallen en verkoopklaar-percentage per merk.
+   Kies een merk in de keuzelijst om het volledige rapport te bekijken.
+5. **Opslaan in geschiedenis** bewaart alle merkanalyses als afzonderlijke items,
+   steeds met de leverancier erbij. De leverancier staat ook in de vergelijking.
+   De lokale geschiedenis bewaart maximaal 100 analyses; grotere leveranciersbundels
+   kun je wel downloaden en via de gedeelde geschiedenis beschikbaar maken.
+6. **Download JSON-snapshot** downloadt één leveranciersbundel met alle merkanalyses
+   (`snapshots`-array). Deze kan op de geschiedenispagina worden geïmporteerd, of als
+   één bestand in `data/history/` met één vermelding in het manifest worden gedeeld.
+   Bestaande snapshots van afzonderlijke merken blijven ondersteund.
+
+Spaties rond merknamen en verschillen in hoofdletters worden samengenomen; de eerste
+schrijfwijze blijft zichtbaar. Producten met een lege merkwaarde of `-` worden niet
+weggelaten: ze staan in een aparte groep **(Onbekend merk)** met een waarschuwing.
+Een ontbrekende merk-kolom geeft een foutmelding, zodat producten niet per ongeluk
+aan het verkeerde merk worden toegewezen. De leveranciersnaam vul je zelf in;
+deze wordt niet afgeleid uit de CSV.
+
+Ook lokaal kun je een leveranciersbundel genereren:
+
+```powershell
+python build_snapshot.py "Merken export\leverancier.csv" --supplier "Leveranciersnaam"
+# Optioneel een eigen uitvoerpad:
+python build_snapshot.py "Merken export\leverancier.csv" --supplier "Leveranciersnaam" --output "data\history\leverancier.json"
+```
+
+De bestaande opdracht met een merknaam blijft ongewijzigd werken.
+
+Regressietests voor opsplitsing, opslag, JSON-bundels en de snapshot-generator
+(Node.js en Python nodig, geen extra pakketten):
+
+```powershell
+node --test tests\supplier.test.cjs
+```
+
 ## Permanente/gedeelde geschiedenis via GitHub
 
 `history.html` toont zowel lokale (per toestel) als **gedeelde** analyses. Gedeelde

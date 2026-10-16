@@ -132,6 +132,28 @@ function detectBrand(records, fieldOverrides = {}) {
   return best;
 }
 
+function analyzeSupplierExport(records, supplier, sourceFile, fieldOverrides = {}) {
+  supplier = supplier.trim();
+  if (!supplier) throw new Error("Vul de leveranciersnaam in.");
+  if (!records.length) throw new Error("Geen rijen gevonden in dit bestand.");
+  const brandField = fieldOverrides.brand || CRITERIA.defaultFields.brand;
+  if (!Object.hasOwn(records[0], brandField)) {
+    throw new Error(`Merk-kolom "${brandField}" ontbreekt. Pas de kolomnaam aan onder Geavanceerd.`);
+  }
+  const groups = new Map();
+  for (const row of records) {
+    const brand = nz(row[brandField]) ? row[brandField].trim() : "";
+    const key = brand.toLowerCase();
+    if (!groups.has(key)) groups.set(key, { brand: brand || "(Onbekend merk)", rows: [], missingBrand: !brand });
+    groups.get(key).rows.push(row);
+  }
+  const date = new Date().toISOString();
+  return [...groups.values()].map(group => ({
+    brand: group.brand, supplier, sourceFile, date, missingBrand: group.missingBrand,
+    result: analyzeExport(group.rows, fieldOverrides),
+  }));
+}
+
 /**
  * Detects category-specific "genormaliseerde" technical spec columns automatically:
  * anything in the CSV that isn't on the fixed non-spec exclude list is a candidate. Per

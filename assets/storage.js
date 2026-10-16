@@ -9,6 +9,7 @@ function summarize(snapshot) {
   const pct = (n) => (k.total ? Math.round((100 * n) / k.total) : 0);
   return {
     brand: snapshot.brand,
+    supplier: snapshot.supplier || "",
     date: snapshot.date,
     sourceFile: snapshot.sourceFile,
     total: k.total,
@@ -32,8 +33,15 @@ function getLocalHistory() {
 }
 
 function saveToLocalHistory(snapshot) {
+  saveSnapshotsToLocalHistory([snapshot]);
+}
+
+function saveSnapshotsToLocalHistory(snapshots) {
+  if (snapshots.length > MAX_LOCAL) {
+    throw new Error(`De lokale geschiedenis bewaart maximaal ${MAX_LOCAL} analyses. Download deze leveranciersanalyse als JSON om alle merken te bewaren.`);
+  }
   const list = getLocalHistory();
-  list.unshift(snapshot);
+  list.unshift(...snapshots);
   while (list.length > MAX_LOCAL) list.pop();
   localStorage.setItem(LOCAL_KEY, JSON.stringify(list));
 }
@@ -44,9 +52,22 @@ function deleteFromLocalHistory(index) {
   localStorage.setItem(LOCAL_KEY, JSON.stringify(list));
 }
 
+function unpackSnapshots(payload) {
+  const snapshots = Array.isArray(payload?.snapshots) ? payload.snapshots : [payload];
+  if (!snapshots.length || snapshots.some(s =>
+    !s || typeof s.brand !== "string" || !s.brand.trim() ||
+    typeof s.sourceFile !== "string" || !Number.isFinite(Date.parse(s.date)) ||
+    (s.supplier !== undefined && typeof s.supplier !== "string") ||
+    !s.result?.kpi || !Number.isFinite(s.result.kpi.total) || !Array.isArray(s.result.data)
+  )) throw new Error("Onherkenbaar snapshot-formaat.");
+  return snapshots;
+}
+
 function downloadSnapshot(snapshot) {
-  const safeBrand = snapshot.brand.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
-  const fileName = `${safeBrand}_${snapshot.date.slice(0, 10)}.json`;
+  const snapshots = unpackSnapshots(snapshot);
+  const name = snapshot.snapshots ? snapshot.supplier : [snapshot.supplier, snapshot.brand].filter(Boolean).join("_");
+  const safeBrand = name.replace(/[^a-z0-9]+/gi, "_").toLowerCase() || "analyse";
+  const fileName = `${safeBrand}_${snapshots[0].date.slice(0, 10)}.json`;
   const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -69,11 +90,14 @@ async function loadManifestHistory() {
         try {
           const r = await fetch(`data/history/${name}`, { cache: "no-store" });
           if (!r.ok) return null;
-          return await r.json();
-        } catch { return null; }
+          return unpackSnapshots(await r.json());
+        } catch (err) {
+          console.error("Kon gedeelde analyse niet laden:", name, err);
+          return null;
+        }
       })
     );
-    return snapshots.filter(Boolean);
+    return snapshots.filter(Boolean).flat();
   } catch {
     return [];
   }
