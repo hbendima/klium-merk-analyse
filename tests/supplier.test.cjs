@@ -162,8 +162,15 @@ test("history groups suppliers, preserves row indices and distinguishes repeated
   assert.match(output, /1 merk &middot; 2 producten &middot; 2 analyses/);
   for (let i = 0; i < 5; i++) assert.match(output, new RegExp(`data-view="${i}"`));
   assert.match(output, /data-del="9"/);
+  assert.match(output, /data-supplier-toggle="supplier b" aria-expanded="true"/);
+  vm.runInContext('collapsedSuppliers.add("supplier b"); renderTable();', context);
+  assert.match(element("historyBody").innerHTML, /data-supplier-toggle="supplier b" aria-expanded="false"/);
+  assert.equal((element("historyBody").innerHTML.match(/<tr class="hidden">/g) || []).length, 2);
   vm.runInContext('sortState = { key: "total", dir: -1 }; renderTable();', context);
   assert.equal((element("historyBody").innerHTML.match(/class="supplier-group"/g) || []).length, 3);
+  assert.equal((element("historyBody").innerHTML.match(/<tr class="hidden">/g) || []).length, 2);
+  vm.runInContext('collapsedSuppliers.delete("supplier b"); renderTable();', context);
+  assert.doesNotMatch(element("historyBody").innerHTML, /<tr class="hidden">/);
 });
 
 test("Python CLI produces matching supplier groups and preserves the legacy command", () => {

@@ -37,7 +37,7 @@
 
   <section id="listSection">
     <h2>Overzicht</h2>
-    <p class="note">Merken staan gegroepeerd per leverancier. Klik op een kolomkop om binnen de groepen te sorteren.
+    <p class="note">Klik op een leverancierskop om de merken in of uit te klappen. Klik op een kolomkop om binnen de groepen te sorteren.
       De producttotalen tellen alle getoonde analyses mee, ook als een merk meermaals is opgeslagen.</p>
     <div class="controls">
       <button id="compareBtn" disabled>Vergelijk geselecteerde</button>
@@ -107,6 +107,7 @@
 <script>
   let allSnapshots = []; // { ...snapshot, origin: 'local'|'shared', localIndex }
   let sortState = { key: "date", dir: -1 };
+  const collapsedSuppliers = new Set();
 
   function pctClass(pct) { return pct >= 70 ? "good" : pct >= 40 ? "warn" : "bad"; }
   function pctBadge(pct) { return `<span class="pill sev-${pctClass(pct)}">${pct}%</span>`; }
@@ -161,15 +162,17 @@
       groups.get(key).rows.push(row);
     }
     tbody.innerHTML = [...groups.values()].map(group => {
+      const key = group.supplier.toLowerCase();
+      const collapsed = collapsedSuppliers.has(key);
       const brandCount = new Set(group.rows.map(row => row.brand.trim().toLowerCase())).size;
       const total = group.rows.reduce((sum, row) => sum + row.total, 0);
       const repeated = group.rows.length > brandCount ? ` &middot; ${group.rows.length} analyses` : "";
-      return `<tr class="supplier-group"><th colspan="14" scope="rowgroup">
-          <div class="supplier-group-heading">
+      return `<tr class="supplier-group"><th colspan="14">
+          <button type="button" class="supplier-group-heading" data-supplier-toggle="${escapeHTML(key)}" aria-expanded="${!collapsed}">
             <strong>${group.supplier ? `Leverancier: ${escapeHTML(group.supplier)}` : "Losse merken (geen leverancier vermeld)"}</strong>
             <span>${brandCount} merk${brandCount === 1 ? "" : "en"} &middot; ${total} producten${repeated}</span>
-          </div>
-        </th></tr>` + group.rows.map(sum => `<tr>
+          </button>
+        </th></tr>` + group.rows.map(sum => `<tr${collapsed ? ' class="hidden"' : ""}>
         <td class="checkbox-cell"><input type="checkbox" data-idx="${sum.idx}" class="rowCheck"></td>
         <td class="history-brand"><b>${escapeHTML(sum.brand)}</b>
           <span class="history-source" title="${escapeHTML(sum.sourceFile)}">${escapeHTML(sum.sourceFile)}</span>
@@ -192,6 +195,18 @@
       </tr>`).join("");
     }).join("");
 
+    tbody.querySelectorAll("[data-supplier-toggle]").forEach(btn => btn.addEventListener("click", () => {
+      const key = btn.dataset.supplierToggle;
+      const collapsed = !collapsedSuppliers.has(key);
+      if (collapsed) collapsedSuppliers.add(key);
+      else collapsedSuppliers.delete(key);
+      btn.setAttribute("aria-expanded", String(!collapsed));
+      let row = btn.closest("tr").nextElementSibling;
+      while (row && !row.classList.contains("supplier-group")) {
+        row.classList.toggle("hidden", collapsed);
+        row = row.nextElementSibling;
+      }
+    }));
     tbody.querySelectorAll(".rowCheck").forEach(cb => cb.addEventListener("change", updateCompareBtn));
     updateCompareBtn();
     tbody.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => {

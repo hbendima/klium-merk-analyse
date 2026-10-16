@@ -99,7 +99,11 @@ password protection) de enige echte oplossing.
 5. **Opslaan in geschiedenis** bewaart alle merkanalyses als afzonderlijke items,
    steeds met de leverancier erbij. De leverancier staat ook in de vergelijking.
    Het overzicht groepeert merken onder een leverancierskop met het aantal unieke
-   merken en het producttotaal. Sorteren gebeurt binnen deze groepen; merken zonder
+   merken en het producttotaal. Klik op de kop (of gebruik Enter/spatie wanneer deze
+   focus heeft) om de merkrijen in of uit te klappen. Groepen zijn standaard open;
+   de gekozen stand blijft bij sorteren behouden zolang de pagina open is.
+   Geselecteerde merken blijven bij inklappen geselecteerd voor vergelijking.
+   Sorteren gebeurt binnen deze groepen; merken zonder
    leverancier staan apart. Meerdere opgeslagen analyses van hetzelfde merk blijven
    zichtbaar en tellen allemaal mee in het producttotaal (het aantal analyses staat
    dan extra vermeld).
