@@ -130,6 +130,9 @@ python build_snapshot.py "Merken export\leverancier.csv" --supplier "Leverancier
 ```
 
 De bestaande opdracht met een merknaam blijft ongewijzigd werken.
+De lokale snapshot-generator accepteert extra lege eindvelden in productrijen
+en meldt hoeveel rijen dit betreft. Extra velden met inhoud zonder kolomnaam
+geven een foutmelding, zodat gegevens niet ongemerkt worden weggelaten.
 
 Regressietests voor opsplitsing, opslag, JSON-bundels en de snapshot-generator
 (Node.js en Python nodig, geen extra pakketten):

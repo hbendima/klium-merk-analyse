@@ -203,6 +203,15 @@ test("Python CLI produces matching supplier groups and preserves the legacy comm
     const missing = spawnSync("python", [script, input, "--supplier", "S", "--output", output], { encoding: "utf8" });
     assert.notEqual(missing.status, 0);
     assert.match(missing.stderr, /Merk-kolom/);
+    fs.writeFileSync(input, "sku;Merk\n1;Alpha;\n2;Beta\n");
+    const trailing = spawnSync("python", [script, input, "--supplier", "S", "--output", output], { encoding: "utf8" });
+    assert.equal(trailing.status, 0, trailing.stderr);
+    assert.match(trailing.stderr, /eindvelden overgeslagen bij 1 productrijen/);
+    assert.equal(JSON.parse(fs.readFileSync(output, "utf8")).snapshots.length, 2);
+    fs.writeFileSync(input, "sku;Merk\n1;Alpha;unexpected\n");
+    const extra = spawnSync("python", [script, input, "--supplier", "S", "--output", output], { encoding: "utf8" });
+    assert.notEqual(extra.status, 0);
+    assert.match(extra.stderr, /Productrij 1 bevat extra velden met inhoud/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

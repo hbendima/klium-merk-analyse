@@ -361,6 +361,15 @@ def main():
 
     with open(args.csv_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f, delimiter=";"))
+    extra_empty_rows = 0
+    for index, row in enumerate(rows, start=1):
+        extra = row.pop(None, [])
+        if any(value.strip() for value in extra):
+            parser.error(f"Productrij {index} bevat extra velden met inhoud zonder kolomnaam. Controleer de CSV-export.")
+        if extra:
+            extra_empty_rows += 1
+    if extra_empty_rows:
+        print(f"Let op: lege extra eindvelden overgeslagen bij {extra_empty_rows} productrijen; alle benoemde kolommen behouden.", file=sys.stderr)
     if not rows:
         parser.error("Geen rijen gevonden in dit bestand.")
     source_file = os.path.basename(args.csv_path)
